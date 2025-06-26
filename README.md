@@ -123,13 +123,19 @@ See [examples/poly-translate-config.el](examples/poly-translate-config.el) for c
 ### Quick Start with Make
 
 ```bash
-# Run tests
+# Run all tests (including native compilation check)
 make test
+
+# Run only unit tests
+make test-unit
+
+# Test native compilation (if available)
+make test-native-compile
 
 # Compile all files
 make compile
 
-# Clean compiled files
+# Clean compiled files (including native compiled)
 make clean
 
 # See all available commands

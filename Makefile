@@ -24,9 +24,36 @@ all: compile
 
 # Run tests
 .PHONY: test
-test:
-	@echo "Running tests..."
+test: test-unit test-native-compile
+	@echo "All tests passed!"
+
+# Run unit tests
+.PHONY: test-unit
+test-unit:
+	@echo "Running unit tests..."
 	@$(BATCH) -l ert -l tests/poly-translate-test.el -f ert-run-tests-batch-and-exit
+
+# Test native compilation
+.PHONY: test-native-compile
+test-native-compile:
+	@echo "Testing native compilation..."
+	@if $(EMACS) --batch --eval "(native-comp-available-p)" 2>/dev/null | grep -q "t"; then \
+		echo "Native compilation is available, testing..."; \
+		$(BATCH) --eval "\
+		  (let ((native-comp-eln-load-path (list (make-temp-file \"poly-translate-eln-\" t)))) \
+		    (dolist (file '($(ALL_FILES))) \
+		      (message \"Native compiling %s...\" file) \
+		      (condition-case err \
+		          (progn \
+		            (native-compile file) \
+		            (message \"✓ %s compiled successfully\" file)) \
+		        (error \
+		          (message \"✗ Failed to compile %s: %s\" file err) \
+		          (kill-emacs 1)))))" || exit 1; \
+		echo "Native compilation test passed!"; \
+	else \
+		echo "Native compilation not available, skipping test"; \
+	fi
 
 # Run specific test
 .PHONY: test-one
@@ -45,6 +72,8 @@ compile: clean
 clean:
 	@echo "Cleaning compiled files..."
 	@rm -f *.elc backends/*.elc tests/*.elc
+	@rm -rf *.eln backends/*.eln tests/*.eln
+	@if [ -d "eln-cache" ]; then rm -rf eln-cache; fi
 
 # Check for issues (basic linting)
 .PHONY: check
@@ -85,12 +114,14 @@ autoloads:
 .PHONY: help
 help:
 	@echo "poly-translate Makefile targets:"
-	@echo "  make test          - Run all tests"
+	@echo "  make test              - Run all tests (unit + native compile)"
+	@echo "  make test-unit         - Run unit tests only"
+	@echo "  make test-native-compile - Test native compilation"
 	@echo "  make test-one TEST=test-name - Run specific test"
-	@echo "  make compile       - Byte compile all files"
-	@echo "  make clean         - Remove compiled files"
-	@echo "  make check         - Check for compilation warnings/errors"
-	@echo "  make run           - Start Emacs with poly-translate loaded"
-	@echo "  make install-deps  - Install required dependencies (gptel)"
-	@echo "  make autoloads     - Generate autoload file"
-	@echo "  make help          - Show this help message"
+	@echo "  make compile           - Byte compile all files"
+	@echo "  make clean             - Remove compiled files"
+	@echo "  make check             - Check for compilation warnings/errors"
+	@echo "  make run               - Start Emacs with poly-translate loaded"
+	@echo "  make install-deps      - Install required dependencies (gptel)"
+	@echo "  make autoloads         - Generate autoload file"
+	@echo "  make help              - Show this help message"
