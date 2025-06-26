@@ -30,6 +30,9 @@
 (require 'url)
 (require 'json)
 
+;; Forward declarations
+(declare-function poly-translate-detect-language "poly-translate-core" (text callback &optional error-callback))
+
 ;; Backend interface definition
 (cl-defgeneric poly-translate-backend-translate (backend text from-lang to-lang config callback error-callback)
   "Translate TEXT from FROM-LANG to TO-LANG using BACKEND.
@@ -42,12 +45,14 @@ ERROR-CALLBACK is called with error message on failure.")
 CALLBACK is called with detected language code.
 ERROR-CALLBACK is called with error message on failure."
   ;; Default implementation - can be overridden by specific backends
+  (ignore backend)  ; Suppress unused argument warning
   (poly-translate-detect-language text callback error-callback))
 
 (cl-defgeneric poly-translate-backend-validate-config (backend config)
   "Validate CONFIG for BACKEND.
 Should signal an error if configuration is invalid."
   ;; Default implementation - backends should override
+  (ignore backend config)  ; Suppress unused argument warnings
   t)
 
 ;; Common utility functions for backends

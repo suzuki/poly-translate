@@ -29,6 +29,26 @@
 (require 'cl-lib)
 (require 'poly-translate-core)
 
+;; External variable declarations
+(defvar poly-translate-use-all-engines)
+(defvar poly-translate-debug)
+(defvar poly-translate-default-engine)
+(defvar poly-translate-buffer-name)
+
+;; Forward function declarations
+(declare-function poly-translate-refresh "poly-translate-ui" ())
+(declare-function poly-translate-yank-translation "poly-translate-ui" ())
+(declare-function poly-translate-change-engine "poly-translate-ui" ())
+(declare-function poly-translate-save-translation "poly-translate-ui" ())
+(declare-function poly-translate--do-translate "poly-translate-ui" (text engine &optional to-kill-ring))
+(declare-function poly-translate--select-engine "poly-translate-ui" ())
+(declare-function poly-translate--get-result-buffer "poly-translate-ui" ())
+(declare-function poly-translate--display-multiple-results-init "poly-translate-ui" (buffer text engines))
+(declare-function poly-translate--update-multiple-results "poly-translate-ui" (buffer engine translation))
+(declare-function poly-translate--finalize-multiple-results "poly-translate-ui" (buffer))
+(declare-function poly-translate--display-result "poly-translate-ui" (buffer engine original translation))
+(declare-function poly-translate--get-current-translation "poly-translate-ui" ())
+
 ;; Customization
 (defcustom poly-translate-show-original t
   "Whether to show original text in translation buffer."

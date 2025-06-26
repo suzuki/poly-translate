@@ -28,6 +28,9 @@
 
 (require 'cl-lib)
 
+;; External variable declarations
+(defvar poly-translate-language-codes)
+
 ;; Engine structure
 (cl-defstruct poly-translate-engine
   "Structure representing a translation engine."
@@ -152,6 +155,7 @@ CALLBACK is called with the detected language code.
 ERROR-CALLBACK is called with error message on failure."
   ;; This is a placeholder - backends can implement their own detection
   ;; For now, we'll use a simple heuristic
+  (ignore error-callback)  ; Suppress unused argument warning
   (let ((lang (cond
                ;; Japanese detection
                ((string-match-p "[あ-ん]\\|[ア-ン]\\|[一-龯]" text) "ja")
