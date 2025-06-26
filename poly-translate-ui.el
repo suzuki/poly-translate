@@ -1,0 +1,418 @@
+;;; poly-translate-ui.el --- User interface for poly-translate -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2024 Free Software Foundation, Inc.
+
+;; Author: Norio Suzuki <norio.suzuki@gmail.com>
+
+;; This file is part of GNU Emacs.
+
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+;;; Commentary:
+
+;; User interface components for poly-translate, including interactive
+;; commands and result display.
+
+;;; Code:
+
+(require 'cl-lib)
+(require 'poly-translate-core)
+
+;; Customization
+(defcustom poly-translate-show-original t
+  "Whether to show original text in translation buffer."
+  :type 'boolean
+  :group 'poly-translate)
+
+(defcustom poly-translate-auto-select-buffer t
+  "Whether to automatically select the translation buffer."
+  :type 'boolean
+  :group 'poly-translate)
+
+(defcustom poly-translate-kill-ring-max 10
+  "Maximum number of translations to keep in kill ring history."
+  :type 'integer
+  :group 'poly-translate)
+
+;; Variables
+(defvar poly-translate-history nil
+  "History of translation requests.")
+
+(defvar poly-translate-kill-ring nil
+  "Kill ring specifically for translations.")
+
+(defvar-local poly-translate-current-engine nil
+  "Current engine used in this translation buffer.")
+
+(defvar-local poly-translate-original-text nil
+  "Original text being translated.")
+
+;; Translation buffer mode
+(defvar poly-translate-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "q" #'quit-window)
+    (define-key map "g" #'poly-translate-refresh)
+    (define-key map "y" #'poly-translate-yank-translation)
+    (define-key map "e" #'poly-translate-change-engine)
+    (define-key map "s" #'poly-translate-save-translation)
+    map)
+  "Keymap for `poly-translate-mode'.")
+
+(define-derived-mode poly-translate-mode special-mode "Poly-Translate"
+  "Major mode for displaying translation results.
+\\{poly-translate-mode-map}"
+  (setq-local revert-buffer-function #'poly-translate-refresh)
+  ;; Ensure UTF-8 encoding for proper display of all languages
+  (set-buffer-file-coding-system 'utf-8-unix)
+  (setq buffer-file-coding-system 'utf-8-unix))
+
+;; Interactive commands
+;;;###autoload
+(defun poly-translate-region (start end &optional engine)
+  "Translate region from START to END using ENGINE.
+If ENGINE is not specified and `poly-translate-use-all-engines' is t,
+use all registered engines. Otherwise, prompt user to select an engine."
+  (interactive "r")
+  (let ((text (buffer-substring-no-properties start end)))
+    (if engine
+        ;; Specific engine provided
+        (poly-translate--do-translate text engine)
+      ;; No engine specified - check preference
+      (if poly-translate-use-all-engines
+          (poly-translate--do-translate-all-engines text)
+        (poly-translate--do-translate text (poly-translate--select-engine))))))
+
+;;;###autoload
+(defun poly-translate-region-to-kill-ring (start end &optional engine)
+  "Translate region from START to END and add to kill ring.
+If ENGINE is not specified, use the default engine or prompt user."
+  (interactive "r")
+  (let* ((text (buffer-substring-no-properties start end))
+         (engine (or engine
+                     (poly-translate--select-engine))))
+    (poly-translate--do-translate text engine t)))
+
+;;;###autoload
+(defun poly-translate-buffer (&optional engine)
+  "Translate entire buffer using ENGINE.
+If ENGINE is not specified, use the default engine or prompt user."
+  (interactive)
+  (poly-translate-region (point-min) (point-max) engine))
+
+;;;###autoload
+(defun poly-translate-string (text &optional engine)
+  "Translate TEXT string using ENGINE.
+If ENGINE is not specified, use the default engine or prompt user."
+  (interactive "sText to translate: ")
+  (let ((engine (or engine (poly-translate--select-engine))))
+    (poly-translate--do-translate text engine)))
+
+;; Translation execution
+(defun poly-translate--do-translate-all-engines (text &optional to-kill-ring)
+  "Translate TEXT using all registered engines.
+If TO-KILL-RING is non-nil, add result to kill ring instead of showing buffer."
+  (let* ((engines (poly-translate-list-engines))
+         (buffer (unless to-kill-ring
+                   (poly-translate--get-result-buffer)))
+         (results (make-hash-table :test 'equal))
+         (completed-count (make-vector 1 0))  ; Use vector for mutable reference
+         (total-engines (length engines)))
+
+
+    (if (= total-engines 0)
+        (message "No translation engines registered")
+      (if to-kill-ring
+          ;; For kill-ring mode, use only the first engine
+          (poly-translate--do-translate text (car engines) t)
+        ;; For buffer display mode, translate with all engines
+        (progn
+          ;; Initialize buffer with original text
+          (poly-translate--display-multiple-results-init buffer text engines)
+
+          ;; Start translation for each engine
+          (dolist (engine engines)
+            (when poly-translate-debug
+              (message "Starting translation with engine: %s" engine))
+            ;; Use lexical binding to properly capture variables
+            (let ((current-engine engine)
+                  (current-buffer buffer)
+                  (current-results results)
+                  (current-total total-engines))
+              (poly-translate-with-engine
+               engine text
+               (lambda (translation)
+                 (when poly-translate-debug
+                   (message "Translation completed for %s: %s" current-engine translation))
+                 (puthash current-engine translation current-results)
+                 (aset completed-count 0 (1+ (aref completed-count 0)))
+                 (poly-translate--update-multiple-results current-buffer current-engine translation)
+                 (when (= (aref completed-count 0) current-total)
+                   (poly-translate--finalize-multiple-results current-buffer)))
+               (lambda (error)
+                 (when poly-translate-debug
+                   (message "Translation error for %s: %s" current-engine error))
+                 (let ((error-msg (format "Error: %s" error)))
+                   (puthash current-engine error-msg current-results)
+                   (aset completed-count 0 (1+ (aref completed-count 0)))
+                   (poly-translate--update-multiple-results current-buffer current-engine error-msg)
+                   (when (= (aref completed-count 0) current-total)
+                     (poly-translate--finalize-multiple-results current-buffer)))))))))))
+
+(defun poly-translate--do-translate (text engine &optional to-kill-ring)
+  "Translate TEXT using ENGINE.
+If TO-KILL-RING is non-nil, add result to kill ring instead of showing buffer."
+  (let ((buffer (unless to-kill-ring
+                  (poly-translate--get-result-buffer))))
+    (poly-translate-with-engine
+     engine text
+     (lambda (translation)
+       (if to-kill-ring
+           (progn
+             (kill-new translation)
+             (poly-translate--add-to-kill-ring translation)
+             (message "Translation added to kill ring"))
+         (poly-translate--display-result buffer engine text translation)))
+     (lambda (error)
+       (message "Translation failed: %s" error)))))
+
+(defun poly-translate--select-engine ()
+  "Select a translation engine interactively."
+  (let ((engines (poly-translate-list-engines)))
+    (when (null engines)
+      (error "No translation engines registered"))
+    (if (and poly-translate-default-engine
+             (member poly-translate-default-engine engines))
+        poly-translate-default-engine
+      (completing-read "Translation engine: " engines nil t))))
+
+(defun poly-translate--get-result-buffer ()
+  "Get or create the translation result buffer."
+  (let ((buffer (get-buffer-create poly-translate-buffer-name)))
+    (with-current-buffer buffer
+      (unless (eq major-mode 'poly-translate-mode)
+        (poly-translate-mode))
+      ;; Ensure proper encoding for multi-language support
+      (set-buffer-file-coding-system 'utf-8)
+      (setq buffer-file-coding-system 'utf-8))
+    buffer))
+
+;; Multiple results display functions
+(defun poly-translate--display-multiple-results-init (buffer text engines)
+  "Initialize BUFFER for multiple translation results display."
+  (with-current-buffer buffer
+    (let ((inhibit-read-only t)
+          (coding-system-for-write 'utf-8)
+          (coding-system-for-read 'utf-8))
+      (erase-buffer)
+      (setq poly-translate-original-text text
+            poly-translate-current-engine nil)
+
+      ;; Header
+      (insert (propertize "Translation Results\n" 'face 'header-line))
+      (insert (make-string 50 ?─) "\n\n")
+
+      ;; Original text
+      (when poly-translate-show-original
+        (insert (propertize "Original:\n" 'face 'font-lock-keyword-face))
+        (insert text "\n\n")
+        (insert (make-string 50 ?─) "\n\n"))
+
+      ;; Create placeholders for each engine
+      (dolist (engine engines)
+        (let ((engine-obj (poly-translate-get-engine engine)))
+          (when engine-obj
+            (let ((input-lang (poly-translate-engine-input-lang engine-obj))
+                  (output-lang (poly-translate-engine-output-lang engine-obj)))
+              (insert (propertize (format "%s (%s → %s):\n"
+                                          engine
+                                          (poly-translate-language-name input-lang)
+                                          (poly-translate-language-name output-lang))
+                                  'face 'font-lock-keyword-face))
+              (insert (propertize "Translating..."
+                                  'face 'font-lock-comment-face
+                                  'engine-name engine) "\n\n")
+              (insert (make-string 50 ?─) "\n\n")))))
+
+      ;; Footer placeholder
+      (insert (propertize "Press 'q' to quit, 'g' to refresh"
+                          'face 'font-lock-comment-face))
+
+      (goto-char (point-min))
+      (when poly-translate-auto-select-buffer
+        (pop-to-buffer buffer)))))
+
+(defun poly-translate--update-multiple-results (buffer engine translation)
+  "Update BUFFER with TRANSLATION result for ENGINE."
+  (with-current-buffer buffer
+    (let ((inhibit-read-only t))
+      (save-excursion
+        (goto-char (point-min))
+        ;; Find text with engine-name property matching this engine
+        (while (not (eobp))
+          (let ((prop (get-text-property (point) 'engine-name)))
+            (if (and prop (string= prop engine))
+                (progn
+                  ;; Found the placeholder for this engine
+                  (let ((start (point))
+                        (end (next-single-property-change (point) 'engine-name nil (point-max))))
+                    (delete-region start end)
+                    (insert translation))
+                  (goto-char (point-max))) ; Exit loop
+              (goto-char (next-single-property-change (point) 'engine-name nil (point-max))))))))))
+
+(defun poly-translate--finalize-multiple-results (buffer)
+  "Finalize multiple results display in BUFFER."
+  (with-current-buffer buffer
+    (let ((inhibit-read-only t))
+      (save-excursion
+        (goto-char (point-max))
+        (when (search-backward "Press 'q' to quit" nil t)
+          (delete-region (point) (point-max))
+          (insert (propertize "Press 'q' to quit, 'g' to refresh, 'y' to yank first result, 'e' to change mode"
+                              'face 'font-lock-comment-face)))))))
+
+(defun poly-translate--display-result (buffer engine original translation)
+  "Display translation result in BUFFER."
+  (with-current-buffer buffer
+    (let ((inhibit-read-only t)
+          (coding-system-for-write 'utf-8)
+          (coding-system-for-read 'utf-8))
+      (erase-buffer)
+      (setq poly-translate-current-engine engine
+            poly-translate-original-text original)
+
+      ;; Header
+      (insert (propertize "Translation Result\n" 'face 'header-line))
+      (insert (propertize (format "Engine: %s\n" engine) 'face 'font-lock-comment-face))
+      (insert (make-string 50 ?─) "\n\n")
+
+      ;; Original text
+      (when poly-translate-show-original
+        (insert (propertize "Original:\n" 'face 'font-lock-keyword-face))
+        (insert original "\n\n")
+        (insert (make-string 50 ?─) "\n\n"))
+
+      ;; Translation
+      (insert (propertize "Translation:\n" 'face 'font-lock-keyword-face))
+      (insert translation "\n")
+
+      ;; Footer
+      (insert "\n" (make-string 50 ?─) "\n")
+      (insert (propertize "Press 'q' to quit, 'g' to refresh, 'y' to yank, 'e' to change engine"
+                          'face 'font-lock-comment-face))
+
+      (goto-char (point-min))
+      (when poly-translate-auto-select-buffer
+        (pop-to-buffer buffer)))))
+
+;; Buffer commands
+(defun poly-translate-refresh ()
+  "Refresh current translation."
+  (interactive)
+  (unless poly-translate-original-text
+    (error "No translation to refresh"))
+  (if poly-translate-current-engine
+      ;; Single engine mode
+      (poly-translate--do-translate
+       poly-translate-original-text
+       poly-translate-current-engine)
+    ;; Multiple engines mode
+    (poly-translate--do-translate-all-engines
+     poly-translate-original-text)))
+
+(defun poly-translate-yank-translation ()
+  "Yank current translation to kill ring."
+  (interactive)
+  (let ((translation (poly-translate--get-current-translation)))
+    (when translation
+      (kill-new translation)
+      (poly-translate--add-to-kill-ring translation)
+      (message "Translation yanked to kill ring"))))
+
+(defun poly-translate-change-engine ()
+  "Change engine mode and retranslate."
+  (interactive)
+  (unless poly-translate-original-text
+    (error "No text to translate"))
+  (if poly-translate-current-engine
+      ;; Currently in single engine mode - switch to multiple or select new single
+      (let ((choice (completing-read
+                     "Select mode: "
+                     '("All engines" "Select single engine")
+                     nil t)))
+        (if (string= choice "All engines")
+            (poly-translate--do-translate-all-engines poly-translate-original-text)
+          (let ((new-engine (poly-translate--select-engine)))
+            (poly-translate--do-translate poly-translate-original-text new-engine))))
+    ;; Currently in multiple engines mode - select single engine
+    (let ((new-engine (poly-translate--select-engine)))
+      (poly-translate--do-translate poly-translate-original-text new-engine))))
+
+(defun poly-translate-save-translation ()
+  "Save current translation to file."
+  (interactive)
+  (let ((translation (poly-translate--get-current-translation)))
+    (when translation
+      (let ((file (read-file-name "Save translation to: ")))
+        (with-temp-file file
+          (insert translation))
+        (message "Translation saved to %s" file)))))
+
+;; Helper functions
+(defun poly-translate--get-current-translation ()
+  "Get the current translation from the buffer.
+In multiple engines mode, returns the first non-error translation."
+  (save-excursion
+    (goto-char (point-min))
+    (if poly-translate-current-engine
+        ;; Single engine mode
+        (when (search-forward "Translation:\n" nil t)
+          (let ((start (point)))
+            (when (search-forward (make-string 50 ?─) nil t)
+              (forward-line -1)
+              (buffer-substring-no-properties start (line-end-position)))))
+      ;; Multiple engines mode - find first valid translation
+      (when (search-forward "Translation Results" nil t)
+        (catch 'found
+          (while (search-forward-regexp "^\\([^:]+\\).*:\n\\([^\n─]+\\)" nil t)
+            (let ((translation (match-string 2)))
+              (unless (string-match-p "^\\(Translating...\\|Error:\\)" translation)
+                (throw 'found translation))))))))))
+
+(defun poly-translate--add-to-kill-ring (translation)
+  "Add TRANSLATION to poly-translate kill ring."
+  (push translation poly-translate-kill-ring)
+  (when (> (length poly-translate-kill-ring) poly-translate-kill-ring-max)
+    (setcdr (nthcdr (1- poly-translate-kill-ring-max) poly-translate-kill-ring) nil)))
+
+;; History management
+(defun poly-translate-show-history ()
+  "Show translation history."
+  (interactive)
+  (let ((buffer (get-buffer-create "*poly-translate-history*")))
+    (with-current-buffer buffer
+      (erase-buffer)
+      (insert "Translation History\n")
+      (insert (make-string 50 ?=) "\n\n")
+      (dolist (item (reverse poly-translate-history))
+        (insert (format "Engine: %s\nOriginal: %s\nTranslation: %s\n\n"
+                        (plist-get item :engine)
+                        (plist-get item :original)
+                        (plist-get item :translation))))
+      (goto-char (point-min))
+      (special-mode))
+    (pop-to-buffer buffer)))
+
+(provide 'poly-translate-ui)
+;;; poly-translate-ui.el ends here
