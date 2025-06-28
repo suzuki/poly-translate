@@ -103,6 +103,34 @@ When creating or editing files, always ensure they end with a newline character.
 
 When creating or editing files, always remove trailing whitespace and ensure empty lines contain no spaces.
 
+## Development Workflow
+
+### Branch and Pull Request Policy
+**IMPORTANT**: All fixes and features MUST follow proper branch workflow:
+
+- **NEVER commit directly to main branch** for fixes or features
+- Always create feature branches for any changes:
+  ```bash
+  git checkout -b feature-name
+  # Make changes
+  git add .
+  git commit -m "description"
+  git push -u origin feature-name
+  ```
+- Always create pull requests for code review before merging
+- Use descriptive branch names that reflect the change being made
+- Examples of good branch names:
+  - `fix-ci-errors`
+  - `improve-translation-layout`
+  - `add-deepl-backend`
+  - `update-documentation`
+
+This workflow ensures:
+- Code review and quality control
+- Proper change tracking
+- Safe integration of changes
+- Rollback capability if needed
+
 ## Important Instructions
 
 Do what has been asked; nothing more, nothing less.
