@@ -53,6 +53,22 @@
   :type 'integer
   :group 'poly-translate)
 
+(defcustom poly-translate-separator-main "═══════════════════════════════════════════════════"
+  "Main section separator line for translation results."
+  :type 'string
+  :group 'poly-translate)
+
+(defcustom poly-translate-separator-engine "────────────────────────────────────────────────────"
+  "Engine block separator line for translation results."
+  :type 'string
+  :group 'poly-translate)
+
+(defcustom poly-translate-engine-prefix "▶ "
+  "Prefix for engine names in translation results.
+Use \"\" for no prefix, or customize with other symbols like \"[%d] \" for numbering."
+  :type 'string
+  :group 'poly-translate)
+
 ;; Variables
 (defvar poly-translate-history nil
   "History of translation requests.")
@@ -179,13 +195,13 @@ If ENGINE is not specified, use the default engine or prompt user."
 
       ;; Header
       (insert (propertize "Translation Results\n" 'face 'header-line))
-      (insert (make-string 50 ?─) "\n\n")
+      (insert poly-translate-separator-main "\n\n")
 
       ;; Original text
       (when poly-translate-show-original
         (insert (propertize "Original:\n" 'face 'font-lock-keyword-face))
         (insert text "\n\n")
-        (insert (make-string 50 ?─) "\n\n"))
+        (insert poly-translate-separator-main "\n\n"))
 
       ;; Create placeholders for each engine
       (dolist (engine engines)
@@ -193,15 +209,15 @@ If ENGINE is not specified, use the default engine or prompt user."
           (when engine-obj
             (let ((input-lang (poly-translate-engine-input-lang engine-obj))
                   (output-lang (poly-translate-engine-output-lang engine-obj)))
-              (insert (propertize (format "%s (%s → %s):\n"
+              (insert (propertize (format "%s%s (%s → %s)\n"
+                                          poly-translate-engine-prefix
                                           engine
                                           (poly-translate-language-name input-lang)
                                           (poly-translate-language-name output-lang))
                                   'face 'font-lock-keyword-face))
               (insert (propertize "Translating..."
                                   'face 'font-lock-comment-face
-                                  'engine-name engine) "\n\n")
-              (insert (make-string 50 ?─) "\n\n")))))
+                                  'engine-name engine) "\n")))))
 
       ;; Footer placeholder
       (insert (propertize "Press 'q' to quit, 'g' to refresh"
@@ -224,16 +240,20 @@ If ENGINE is not specified, use the default engine or prompt user."
           ;; Now we should be at the "Translating..." line
           (when (looking-at "Translating\\.\\.\\.")
             (let ((start (point)))
-              ;; Find the end of this section (next ─── line or end of buffer)
-              (if (search-forward-regexp "^──────" nil t)
+              ;; Find the end of this section (next ▶ prefix or end of buffer)
+              (if (search-forward-regexp (format "^%s" (regexp-quote poly-translate-engine-prefix)) nil t)
                   (progn
                     (beginning-of-line)
                     (delete-region start (point)))
-                ;; If no separator found, delete to end of buffer
-                (delete-region start (point-max)))
-              ;; Insert the translation
+                ;; If no next engine found, delete to end but preserve footer
+                (if (search-forward "Press 'q' to quit" nil t)
+                    (progn
+                      (beginning-of-line)
+                      (delete-region start (point)))
+                  (delete-region start (point-max))))
+              ;; Insert the translation with separator
               (goto-char start)
-              (insert translation "\n\n──────────────────────────────────────────────────\n\n"))))))))
+              (insert translation "\n" poly-translate-separator-engine "\n\n"))))))))
 
 (defun poly-translate--finalize-multiple-results (buffer)
   "Finalize the display of multiple results in BUFFER."
@@ -258,31 +278,31 @@ If ENGINE is not specified, use the default engine or prompt user."
 
       ;; Header
       (insert (propertize "Translation Result\n" 'face 'header-line))
-      (insert (make-string 50 ?─) "\n\n")
-
-      ;; Engine info
-      (let ((engine-obj (poly-translate-get-engine engine)))
-        (when engine-obj
-          (let ((input-lang (poly-translate-engine-input-lang engine-obj))
-                (output-lang (poly-translate-engine-output-lang engine-obj)))
-            (insert (propertize (format "Engine: %s (%s → %s)\n\n"
-                                        engine
-                                        (poly-translate-language-name input-lang)
-                                        (poly-translate-language-name output-lang))
-                                'face 'font-lock-keyword-face)))))
+      (insert poly-translate-separator-main "\n\n")
 
       ;; Original text
       (when poly-translate-show-original
         (insert (propertize "Original:\n" 'face 'font-lock-keyword-face))
         (insert original "\n\n")
-        (insert (make-string 50 ?─) "\n\n"))
+        (insert poly-translate-separator-main "\n\n"))
+
+      ;; Engine info and translation
+      (let ((engine-obj (poly-translate-get-engine engine)))
+        (when engine-obj
+          (let ((input-lang (poly-translate-engine-input-lang engine-obj))
+                (output-lang (poly-translate-engine-output-lang engine-obj)))
+            (insert (propertize (format "%s%s (%s → %s)\n"
+                                        poly-translate-engine-prefix
+                                        engine
+                                        (poly-translate-language-name input-lang)
+                                        (poly-translate-language-name output-lang))
+                                'face 'font-lock-keyword-face)))))
 
       ;; Translation
-      (insert (propertize "Translation:\n" 'face 'font-lock-keyword-face))
-      (insert translation "\n\n")
+      (insert translation "\n")
+      (insert poly-translate-separator-engine "\n\n")
 
       ;; Footer
-      (insert (make-string 50 ?─) "\n")
       (insert (propertize "Press 'q' to quit, 'r' to refresh, 'y' to yank, 'c' to change engine"
                           'face 'font-lock-comment-face))
 
