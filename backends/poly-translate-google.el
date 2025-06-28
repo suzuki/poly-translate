@@ -27,8 +27,10 @@
 ;;; Code:
 
 (require 'poly-translate-backend)
+(require 'poly-translate-core)
 (require 'url)
 (require 'json)
+(require 'cl-lib)
 
 ;; Constants
 (defconst poly-translate-google-api-url "https://translation.googleapis.com/language/translate/v2"
@@ -48,22 +50,20 @@
                       (funcall api-key-raw)
                     api-key-raw))
 
-    (unless api-key
-      (funcall error-callback "Google Translate API key not configured")
-      (return-from poly-translate-backend-translate))
-
-    ;; Check cache first
-    (let ((cached (poly-translate-backend-cache-get backend text from-lang to-lang)))
-      (when cached
-        (funcall callback cached)
-        (return-from poly-translate-backend-translate)))
-
-    ;; Check rate limit
-    (unless (poly-translate-backend-check-rate-limit backend 100 3600) ; 100 requests per hour
-      (funcall error-callback "Rate limit exceeded for Google Translate")
-      (return-from poly-translate-backend-translate))
-
-    (let* ((params `(("key" . ,api-key)
+    (cond
+     ((not api-key)
+      (funcall error-callback "Google Translate API key not configured"))
+     
+     ;; Check cache first
+     ((poly-translate-backend-cache-get backend text from-lang to-lang)
+      (funcall callback (poly-translate-backend-cache-get backend text from-lang to-lang)))
+     
+     ;; Check rate limit
+     ((not (poly-translate-backend-check-rate-limit backend 100 3600)) ; 100 requests per hour
+      (funcall error-callback "Rate limit exceeded for Google Translate"))
+     
+     (t
+      (let* ((params `(("key" . ,api-key)
                      ("q" . ,text)
                      ("target" . ,to-lang)
                      ,@(unless (string= from-lang "auto")
@@ -99,15 +99,15 @@
            (error
             (funcall error-callback (format "Error parsing response: %s" err)))))
        (lambda (err)
-         (funcall error-callback (format "Google Translate API error: %s" err)))))))
+         (funcall error-callback (format "Google Translate API error: %s" err)))))))))
 
-(cl-defmethod poly-translate-backend-detect-language ((backend (eql google)) text callback error-callback)
+(cl-defmethod poly-translate-backend-detect-language ((_backend (eql google)) text callback error-callback)
   "Detect language using Google Translate API."
   ;; For now, use the simple built-in detection
   ;; Could be enhanced to use Google's detection API
   (poly-translate-detect-language text callback error-callback))
 
-(cl-defmethod poly-translate-backend-validate-config ((backend (eql google)) config)
+(cl-defmethod poly-translate-backend-validate-config ((_backend (eql google)) config)
   "Validate Google Translate configuration."
   (unless (plist-get config :api-key)
     (signal 'poly-translate-config-error

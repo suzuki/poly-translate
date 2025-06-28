@@ -40,12 +40,11 @@ CONFIG is backend-specific configuration.
 CALLBACK is called with translated text on success.
 ERROR-CALLBACK is called with error message on failure.")
 
-(cl-defgeneric poly-translate-backend-detect-language (backend text callback error-callback)
+(cl-defgeneric poly-translate-backend-detect-language (_backend text callback error-callback)
   "Detect language of TEXT using BACKEND.
 CALLBACK is called with detected language code.
 ERROR-CALLBACK is called with error message on failure."
   ;; Default implementation - can be overridden by specific backends
-  (ignore backend)  ; Suppress unused argument warning
   (poly-translate-detect-language text callback error-callback))
 
 (cl-defgeneric poly-translate-backend-validate-config (backend config)
