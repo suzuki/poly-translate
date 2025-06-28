@@ -447,6 +447,20 @@ In multiple engines mode, returns the first non-error translation."
                          'face 'highlight)
       ;; Set edit mode flag
       (setq poly-translate--edit-mode t)
+      ;; Enable text insertion by making buffer fully writable
+      (setq-local buffer-read-only nil)
+      ;; Create a keymap that allows normal text input
+      (let ((edit-map (make-sparse-keymap)))
+        ;; Define only the essential exit commands
+        (define-key edit-map (kbd "C-c C-c") #'poly-translate--finish-edit-original)
+        (define-key edit-map (kbd "C-c C-k") #'poly-translate--cancel-edit-original)
+        ;; Set parent to global-map to allow normal character insertion
+        (set-keymap-parent edit-map global-map)
+        (use-local-map edit-map))
+      ;; Remove any existing field properties that might interfere
+      (remove-text-properties poly-translate--original-start
+                              poly-translate--original-end
+                              '(field nil))
       ;; Move cursor to original text
       (goto-char poly-translate--original-start)
       (message "Original text editing mode. Press C-c C-c to finish, C-c C-k to cancel."))))
@@ -468,6 +482,9 @@ In multiple engines mode, returns the first non-error translation."
                                 poly-translate--original-end 
                                 '(face nil)))
       (setq poly-translate--edit-mode nil)
+      ;; Restore original keymap and read-only status
+      (use-local-map poly-translate-mode-map)
+      (setq-local buffer-read-only t)
       ;; Retranslate
       (poly-translate--retranslate new-text)
       (message "Translation updated."))))
@@ -489,6 +506,9 @@ In multiple engines mode, returns the first non-error translation."
                               poly-translate--original-end 
                               '(face nil)))
     (setq poly-translate--edit-mode nil)
+    ;; Restore original keymap and read-only status
+    (use-local-map poly-translate-mode-map)
+    (setq-local buffer-read-only t)
     (message "Edit cancelled.")))
 
 (defun poly-translate--retranslate (new-text)
