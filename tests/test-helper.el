@@ -84,6 +84,9 @@
 (defvar poly-translate-test-mock-responses nil
   "Alist of mock HTTP responses for testing.")
 
+(defvar poly-translate-test-original-url-retrieve nil
+  "Original url-retrieve function for restoration.")
+
 (defun poly-translate-test-mock-http-response (url response)
   "Set up mock HTTP response for URL."
   (setf (alist-get url poly-translate-test-mock-responses nil nil #'string=) response))
@@ -91,6 +94,49 @@
 (defun poly-translate-test-clear-mock-responses ()
   "Clear all mock HTTP responses."
   (setq poly-translate-test-mock-responses nil))
+
+(defun poly-translate-test-enable-http-mocking ()
+  "Enable HTTP request mocking."
+  (unless poly-translate-test-original-url-retrieve
+    (setq poly-translate-test-original-url-retrieve
+          (symbol-function 'poly-translate-backend-url-retrieve)))
+  
+  (fset 'poly-translate-backend-url-retrieve
+        (lambda (url callback error-callback &rest args)
+          (let ((response (alist-get url poly-translate-test-mock-responses nil nil #'string=)))
+            (if response
+                (if (string-prefix-p "ERROR:" response)
+                    (funcall error-callback (substring response 6))
+                  (funcall callback response))
+              (funcall error-callback (format "No mock response for URL: %s" url)))))))
+
+(defun poly-translate-test-disable-http-mocking ()
+  "Disable HTTP request mocking and restore original function."
+  (when poly-translate-test-original-url-retrieve
+    (fset 'poly-translate-backend-url-retrieve poly-translate-test-original-url-retrieve)
+    (setq poly-translate-test-original-url-retrieve nil)))
+
+(defmacro poly-translate-test-with-http-mocking (&rest body)
+  "Execute BODY with HTTP mocking enabled."
+  `(unwind-protect
+       (progn
+         (poly-translate-test-enable-http-mocking)
+         ,@body)
+     (poly-translate-test-disable-http-mocking)
+     (poly-translate-test-clear-mock-responses)))
+
+;; Mock API responses
+(defun poly-translate-test-deepl-success-response (text)
+  "Generate a mock DeepL success response for TEXT."
+  (format "{\"translations\":[{\"text\":\"%s\",\"detected_source_language\":\"EN\"}]}" text))
+
+(defun poly-translate-test-google-success-response (text)
+  "Generate a mock Google Translate success response for TEXT."
+  (format "{\"data\":{\"translations\":[{\"translatedText\":\"%s\"}]}}" text))
+
+(defun poly-translate-test-error-response (message)
+  "Generate a mock error response with MESSAGE."
+  (format "ERROR:%s" message))
 
 ;; Test assertion helpers
 (defun poly-translate-test-should-contain (string substring)

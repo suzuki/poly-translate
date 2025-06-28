@@ -82,10 +82,16 @@
 (defun poly-translate-llm-setup-gptel-backend (config)
   "Set up gptel backend from CONFIG."
   (let ((provider (plist-get config :provider))
-        (api-key (plist-get config :api-key))
+        (api-key-raw (plist-get config :api-key))
         (model (plist-get config :model))
         (host (plist-get config :host))
-        (stream (plist-get config :stream)))
+        (stream (plist-get config :stream))
+        api-key)
+    
+    ;; Handle function or string API key
+    (setq api-key (if (functionp api-key-raw)
+                      (funcall api-key-raw)
+                    api-key-raw))
 
     (cond
      ;; OpenAI
@@ -186,23 +192,26 @@
 ;; Validation methods
 (cl-defmethod poly-translate-backend-validate-config ((backend (eql llm-openai)) config)
   "Validate OpenAI configuration."
-  (unless (plist-get config :api-key)
-    (signal 'poly-translate-config-error
-            '("OpenAI backend requires :api-key in configuration")))
+  (let ((api-key-raw (plist-get config :api-key)))
+    (unless (or (stringp api-key-raw) (functionp api-key-raw))
+      (signal 'poly-translate-config-error
+              '("OpenAI backend requires :api-key in configuration"))))
   t)
 
 (cl-defmethod poly-translate-backend-validate-config ((backend (eql llm-anthropic)) config)
   "Validate Anthropic configuration."
-  (unless (plist-get config :api-key)
-    (signal 'poly-translate-config-error
-            '("Anthropic backend requires :api-key in configuration")))
+  (let ((api-key-raw (plist-get config :api-key)))
+    (unless (or (stringp api-key-raw) (functionp api-key-raw))
+      (signal 'poly-translate-config-error
+              '("Anthropic backend requires :api-key in configuration"))))
   t)
 
 (cl-defmethod poly-translate-backend-validate-config ((backend (eql llm-gemini)) config)
   "Validate Gemini configuration."
-  (unless (plist-get config :api-key)
-    (signal 'poly-translate-config-error
-            '("Gemini backend requires :api-key in configuration")))
+  (let ((api-key-raw (plist-get config :api-key)))
+    (unless (or (stringp api-key-raw) (functionp api-key-raw))
+      (signal 'poly-translate-config-error
+              '("Gemini backend requires :api-key in configuration"))))
   t)
 
 ;; Register backends

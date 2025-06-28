@@ -40,7 +40,14 @@
 ;; Backend implementation
 (cl-defmethod poly-translate-backend-translate ((backend (eql google)) text from-lang to-lang config callback error-callback)
   "Translate TEXT using Google Translate API."
-  (let ((api-key (plist-get config :api-key)))
+  (let ((api-key-raw (plist-get config :api-key))
+        api-key)
+    
+    ;; Handle function or string API key
+    (setq api-key (if (functionp api-key-raw)
+                      (funcall api-key-raw)
+                    api-key-raw))
+    
     (unless api-key
       (funcall error-callback "Google Translate API key not configured")
       (return-from poly-translate-backend-translate))

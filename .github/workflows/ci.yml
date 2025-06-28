@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        emacs-version:
+          - '30.0'
+          - 'snapshot'  # HEAD version
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Emacs ${{ matrix.emacs-version }}
+      uses: purcell/setup-emacs@master
+      with:
+        version: ${{ matrix.emacs-version }}
+    
+    - name: Install dependencies
+      run: |
+        emacs -Q -batch \
+          --eval "(require 'package)" \
+          --eval "(add-to-list 'package-archives '(\"melpa\" . \"https://melpa.org/packages/\"))" \
+          --eval "(package-initialize)" \
+          --eval "(package-refresh-contents)" \
+          --eval "(package-install 'gptel)"
+    
+    - name: Byte compile
+      run: |
+        emacs -Q -batch -L . \
+          --eval "(setq byte-compile-error-on-warn t)" \
+          -f batch-byte-compile \
+          *.el backends/*.el
+    
+    - name: Run unit tests
+      run: |
+        emacs -Q -batch -L . \
+          --eval "(require 'ert)" \
+          --eval "(require 'poly-translate)" \
+          -l tests/test-helper.el \
+          -l tests/poly-translate-test.el \
+          --eval "(ert-run-tests-batch-and-exit)"
+    
+    - name: Check package loading
+      run: |
+        emacs -Q -batch -L . \
+          --eval "(require 'poly-translate)" \
+          --eval "(message \"Package loaded successfully\")"
+    
+    - name: Lint with checkdoc
+      run: |
+        emacs -Q -batch -L . \
+          --eval "(checkdoc-file \"poly-translate.el\")" \
+          --eval "(checkdoc-file \"poly-translate-core.el\")" \
+          --eval "(checkdoc-file \"poly-translate-backend.el\")" \
+          --eval "(checkdoc-file \"poly-translate-ui.el\")"
+      continue-on-error: true  # Don't fail CI on documentation issues

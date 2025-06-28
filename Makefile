@@ -14,7 +14,9 @@ BACKEND_FILES = backends/poly-translate-google.el \
                 backends/poly-translate-llm.el
 
 TEST_FILES = tests/test-helper.el \
-             tests/poly-translate-test.el
+             tests/poly-translate-test.el \
+             tests/poly-translate-backend-test.el \
+             tests/poly-translate-interactive-test.el
 
 ALL_FILES = $(MAIN_FILES) $(BACKEND_FILES)
 
@@ -24,14 +26,26 @@ all: compile
 
 # Run tests
 .PHONY: test
-test: test-unit test-native-compile
+test: install-deps test-unit test-backend test-interactive test-native-compile
 	@echo "All tests passed!"
 
 # Run unit tests
 .PHONY: test-unit
 test-unit:
 	@echo "Running unit tests..."
-	@$(BATCH) -l ert -l tests/poly-translate-test.el -f ert-run-tests-batch-and-exit
+	@$(BATCH) -l ert -l tests/test-helper.el -l tests/poly-translate-test.el -f ert-run-tests-batch-and-exit
+
+# Run backend tests
+.PHONY: test-backend
+test-backend:
+	@echo "Running backend tests..."
+	@$(BATCH) -l ert -l tests/test-helper.el -l tests/poly-translate-backend-test.el -f ert-run-tests-batch-and-exit
+
+# Run interactive command tests
+.PHONY: test-interactive
+test-interactive:
+	@echo "Running interactive command tests..."
+	@$(BATCH) -l ert -l tests/test-helper.el -l tests/poly-translate-interactive-test.el -f ert-run-tests-batch-and-exit
 
 # Test native compilation
 .PHONY: test-native-compile
