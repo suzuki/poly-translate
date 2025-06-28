@@ -36,14 +36,6 @@
 (defvar poly-translate-buffer-name)
 
 ;; Forward function declarations
-(declare-function poly-translate-refresh "poly-translate-ui" ())
-(declare-function poly-translate-yank-translation "poly-translate-ui" ())
-(declare-function poly-translate-change-engine "poly-translate-ui" ())
-(declare-function poly-translate-save-translation "poly-translate-ui" ())
-(declare-function poly-translate--get-current-translation "poly-translate-ui" ())
-(declare-function poly-translate--do-translate "poly-translate-ui" (text engine &optional to-kill-ring))
-(declare-function poly-translate--select-engine "poly-translate-ui" ())
-(declare-function poly-translate--do-translate-all-engines "poly-translate-ui" (text &optional to-kill-ring))
 
 ;; Customization
 (defcustom poly-translate-show-original t
@@ -92,6 +84,34 @@
   ;; Ensure UTF-8 encoding for proper display of all languages
   (set-buffer-file-coding-system 'utf-8-unix)
   (setq buffer-file-coding-system 'utf-8-unix))
+
+;; Helper functions
+(defun poly-translate--do-translate (text engine &optional to-kill-ring)
+  "Translate TEXT using ENGINE.
+If TO-KILL-RING is non-nil, add result to kill ring instead of showing buffer."
+  (let ((buffer (unless to-kill-ring
+                  (poly-translate--get-result-buffer))))
+    (poly-translate-with-engine
+     engine text
+     (lambda (translation)
+       (if to-kill-ring
+           (progn
+             (kill-new translation)
+             (poly-translate--add-to-kill-ring translation)
+             (message "Translation added to kill ring"))
+         (poly-translate--display-result buffer engine text translation)))
+     (lambda (error)
+       (message "Translation failed: %s" error)))))
+
+(defun poly-translate--select-engine ()
+  "Select a translation engine interactively."
+  (let ((engines (poly-translate-list-engines)))
+    (when (null engines)
+      (error "No translation engines registered"))
+    (if (and poly-translate-default-engine
+             (member poly-translate-default-engine engines))
+        poly-translate-default-engine
+      (completing-read "Translation engine: " engines nil t))))
 
 ;; Interactive commands
 ;;;###autoload
@@ -283,7 +303,7 @@ If TO-KILL-RING is non-nil, add result to kill ring instead of showing buffer."
 
 
     (if (= total-engines 0)
-        (message "No translation engines registered")
+        (error "No translation engines registered")
       (if to-kill-ring
           ;; For kill-ring mode, use only the first engine
           (poly-translate--do-translate text (car engines) t)
@@ -319,34 +339,8 @@ If TO-KILL-RING is non-nil, add result to kill ring instead of showing buffer."
                    (aset completed-count 0 (1+ (aref completed-count 0)))
                    (poly-translate--update-multiple-results current-buffer current-engine error-msg)
                    (when (= (aref completed-count 0) current-total)
-                     (poly-translate--finalize-multiple-results current-buffer)))))))))))
+                     (poly-translate--finalize-multiple-results current-buffer))))))))))))
 
-(defun poly-translate--do-translate (text engine &optional to-kill-ring)
-  "Translate TEXT using ENGINE.
-If TO-KILL-RING is non-nil, add result to kill ring instead of showing buffer."
-  (let ((buffer (unless to-kill-ring
-                  (poly-translate--get-result-buffer))))
-    (poly-translate-with-engine
-     engine text
-     (lambda (translation)
-       (if to-kill-ring
-           (progn
-             (kill-new translation)
-             (poly-translate--add-to-kill-ring translation)
-             (message "Translation added to kill ring"))
-         (poly-translate--display-result buffer engine text translation)))
-     (lambda (error)
-       (message "Translation failed: %s" error)))))
-
-(defun poly-translate--select-engine ()
-  "Select a translation engine interactively."
-  (let ((engines (poly-translate-list-engines)))
-    (when (null engines)
-      (error "No translation engines registered"))
-    (if (and poly-translate-default-engine
-             (member poly-translate-default-engine engines))
-        poly-translate-default-engine
-      (completing-read "Translation engine: " engines nil t))))
 
 
 
@@ -369,7 +363,7 @@ In multiple engines mode, returns the first non-error translation."
           (while (search-forward-regexp "^\\([^:]+\\).*:\n\\([^\n─]+\\)" nil t)
             (let ((translation (match-string 2)))
               (unless (string-match-p "^\\(Translating...\\|Error:\\)" translation)
-                (throw 'found translation))))))))))
+                (throw 'found translation)))))))))
 
 (defun poly-translate--add-to-kill-ring (translation)
   "Add TRANSLATION to poly-translate kill ring."
