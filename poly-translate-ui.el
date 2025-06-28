@@ -82,14 +82,27 @@ Use \"\" for no prefix, or customize with other symbols like \"[%d] \" for numbe
 (defvar-local poly-translate-original-text nil
   "Original text being translated.")
 
+;; Variables for editable original text
+(defvar-local poly-translate--original-start nil
+  "Start position of original text in translation buffer.")
+
+(defvar-local poly-translate--original-end nil
+  "End position of original text in translation buffer.")
+
+(defvar-local poly-translate--edit-mode nil
+  "Non-nil when original text is in edit mode.")
+
 ;; Translation buffer mode
 (defvar poly-translate-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map "q" #'quit-window)
     (define-key map "g" #'poly-translate-refresh)
     (define-key map "y" #'poly-translate-yank-translation)
-    (define-key map "e" #'poly-translate-change-engine)
+    (define-key map "e" #'poly-translate-toggle-edit-original)
+    (define-key map "c" #'poly-translate-change-engine)
     (define-key map "s" #'poly-translate-save-translation)
+    (define-key map (kbd "C-c C-c") #'poly-translate--finish-edit-original)
+    (define-key map (kbd "C-c C-k") #'poly-translate--cancel-edit-original)
     map)
   "Keymap for `poly-translate-mode'.")
 
@@ -200,7 +213,17 @@ If ENGINE is not specified, use the default engine or prompt user."
       ;; Original text
       (when poly-translate-show-original
         (insert (propertize "Original:\n" 'face 'font-lock-keyword-face))
-        (insert text "\n\n")
+        (setq poly-translate--original-start (point))
+        (insert text)
+        (setq poly-translate--original-end (point))
+        ;; Mark original text as read-only initially
+        (put-text-property poly-translate--original-start 
+                           poly-translate--original-end 
+                           'read-only t)
+        (put-text-property poly-translate--original-start 
+                           poly-translate--original-end 
+                           'poly-translate-section 'original)
+        (insert "\n\n")
         (insert poly-translate-separator-main "\n\n"))
 
       ;; Create placeholders for each engine
@@ -220,7 +243,7 @@ If ENGINE is not specified, use the default engine or prompt user."
                                   'engine-name engine) "\n")))))
 
       ;; Footer placeholder
-      (insert (propertize "Press 'q' to quit, 'g' to refresh"
+      (insert (propertize "Press 'q' to quit, 'g' to refresh, 'e' to edit original"
                           'face 'font-lock-comment-face))
 
       (goto-char (point-min))
@@ -283,7 +306,17 @@ If ENGINE is not specified, use the default engine or prompt user."
       ;; Original text
       (when poly-translate-show-original
         (insert (propertize "Original:\n" 'face 'font-lock-keyword-face))
-        (insert original "\n\n")
+        (setq poly-translate--original-start (point))
+        (insert original)
+        (setq poly-translate--original-end (point))
+        ;; Mark original text as read-only initially
+        (put-text-property poly-translate--original-start 
+                           poly-translate--original-end 
+                           'read-only t)
+        (put-text-property poly-translate--original-start 
+                           poly-translate--original-end 
+                           'poly-translate-section 'original)
+        (insert "\n\n")
         (insert poly-translate-separator-main "\n\n"))
 
       ;; Engine info and translation
@@ -303,7 +336,7 @@ If ENGINE is not specified, use the default engine or prompt user."
       (insert poly-translate-separator-engine "\n\n")
 
       ;; Footer
-      (insert (propertize "Press 'q' to quit, 'r' to refresh, 'y' to yank, 'c' to change engine"
+      (insert (propertize "Press 'q' to quit, 'g' to refresh, 'y' to yank, 'e' to edit original, 'c' to change engine"
                           'face 'font-lock-comment-face))
 
       (goto-char (point-min))
@@ -390,6 +423,82 @@ In multiple engines mode, returns the first non-error translation."
   (push translation poly-translate-kill-ring)
   (when (> (length poly-translate-kill-ring) poly-translate-kill-ring-max)
     (setcdr (nthcdr (1- poly-translate-kill-ring-max) poly-translate-kill-ring) nil)))
+
+;; Original text editing functions
+(defun poly-translate-toggle-edit-original ()
+  "Toggle edit mode for original text."
+  (interactive)
+  (if poly-translate--edit-mode
+      (poly-translate--finish-edit-original)
+    (poly-translate--start-edit-original)))
+
+(defun poly-translate--start-edit-original ()
+  "Start editing the original text."
+  (when (and poly-translate--original-start 
+             poly-translate--original-end)
+    (let ((inhibit-read-only t))
+      ;; Make original text editable
+      (put-text-property poly-translate--original-start 
+                         poly-translate--original-end 
+                         'read-only nil)
+      ;; Add visual feedback
+      (put-text-property poly-translate--original-start 
+                         poly-translate--original-end 
+                         'face 'highlight)
+      ;; Set edit mode flag
+      (setq poly-translate--edit-mode t)
+      ;; Move cursor to original text
+      (goto-char poly-translate--original-start)
+      (message "Original text editing mode. Press C-c C-c to finish, C-c C-k to cancel."))))
+
+(defun poly-translate--finish-edit-original ()
+  "Finish editing original text and retranslate."
+  (when poly-translate--edit-mode
+    (let ((new-text (buffer-substring-no-properties 
+                     poly-translate--original-start 
+                     poly-translate--original-end)))
+      ;; Update original text variable
+      (setq poly-translate-original-text new-text)
+      ;; End edit mode
+      (let ((inhibit-read-only t))
+        (put-text-property poly-translate--original-start 
+                           poly-translate--original-end 
+                           'read-only t)
+        (remove-text-properties poly-translate--original-start 
+                                poly-translate--original-end 
+                                '(face nil)))
+      (setq poly-translate--edit-mode nil)
+      ;; Retranslate
+      (poly-translate--retranslate new-text)
+      (message "Translation updated."))))
+
+(defun poly-translate--cancel-edit-original ()
+  "Cancel editing original text without retranslating."
+  (when poly-translate--edit-mode
+    (let ((inhibit-read-only t))
+      ;; Restore original text
+      (delete-region poly-translate--original-start poly-translate--original-end)
+      (goto-char poly-translate--original-start)
+      (insert poly-translate-original-text)
+      (setq poly-translate--original-end (point))
+      ;; End edit mode
+      (put-text-property poly-translate--original-start 
+                         poly-translate--original-end 
+                         'read-only t)
+      (remove-text-properties poly-translate--original-start 
+                              poly-translate--original-end 
+                              '(face nil)))
+    (setq poly-translate--edit-mode nil)
+    (message "Edit cancelled.")))
+
+(defun poly-translate--retranslate (new-text)
+  "Retranslate NEW-TEXT using current engine(s)."
+  (if poly-translate-current-engine
+      ;; Single engine retranslation
+      (poly-translate--do-translate new-text poly-translate-current-engine)
+    ;; Multiple engines retranslation
+    (let ((engines (poly-translate-list-engines)))
+      (poly-translate--do-translate-all-engines new-text))))
 
 ;; Commands in result buffer
 (defun poly-translate-yank-translation ()
