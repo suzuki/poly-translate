@@ -122,6 +122,14 @@ FUNCTIONS should be a plist with at least :translate function."
   "Get the backend functions for BACKEND-SYMBOL."
   (gethash backend-symbol poly-translate-backends))
 
+(defun poly-translate-list-backends ()
+  "Return a list of all registered backend symbols."
+  (let (backends)
+    (maphash (lambda (backend-symbol _functions)
+               (push backend-symbol backends))
+             poly-translate-backends)
+    (sort backends #'string<)))
+
 ;; Translation execution
 (defun poly-translate-with-engine (engine-name text callback &optional error-callback)
   "Translate TEXT using engine with ENGINE-NAME.
