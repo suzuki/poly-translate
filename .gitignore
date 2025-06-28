@@ -1,0 +1,31 @@
+# Byte-compiled / optimized / DLL files
+*.elc
+*.eln
+
+# Native compilation cache
+eln-cache/
+
+# Temporary files
+*~
+\#*\#
+.\#*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Claude Code files
+.claude/
+PROMPT/
+SCRATCHPAD.md
+
+# Debug files
+debug-*.el
+
+# Examples (user should copy and customize)
+examples/

@@ -16,7 +16,7 @@ make test
 
 # 個別テストの実行
 make test-unit              # 基本単体テスト
-make test-backend          # バックエンド固有テスト  
+make test-backend          # バックエンド固有テスト
 make test-interactive      # 対話的コマンドテスト
 make test-native-compile   # ネイティブコンパイルテスト
 
@@ -39,7 +39,7 @@ Running unit tests...
 Running 15 tests (2025-06-28 19:33:58+0900, selector 't')
    passed  15/15  (1.103974 sec)
 
-$ make test-backend  
+$ make test-backend
 Running backend tests...
 Running 13 tests (2025-06-28 19:34:09+0900, selector 't')
    passed  13/13  (0.296597 sec)
@@ -88,7 +88,7 @@ Running 13 tests (2025-06-28 19:34:09+0900, selector 't')
 ### 3. 対話的コマンドテスト (`tests/poly-translate-interactive-test.el`)
 
 - `M-x poly-translate-region`
-- `M-x poly-translate-buffer` 
+- `M-x poly-translate-buffer`
 - `M-x poly-translate-string`
 - バッファ表示・UI操作
 - エンジン選択ロジック
@@ -108,10 +108,10 @@ Running 13 tests (2025-06-28 19:34:09+0900, selector 't')
 ```elisp
 ;; モック使用例
 (poly-translate-test-with-http-mocking
-  (poly-translate-test-mock-http-response 
+  (poly-translate-test-mock-http-response
    "https://api-free.deepl.com/v2/translate"
    (poly-translate-test-deepl-success-response "こんにちは"))
-  
+
   ;; 実際のAPI呼び出しなしでテスト実行
   (poly-translate-with-engine "DeepL" "Hello" ...))
 ```
@@ -134,7 +134,7 @@ Running 13 tests (2025-06-28 19:34:09+0900, selector 't')
 ;; 文字列APIキー
 (poly-translate-register-deepl-engine "DeepL" "auto" "ja" "your-api-key" nil)
 
-;; 関数APIキー  
+;; 関数APIキー
 (poly-translate-register-deepl-engine "DeepL" "auto" "ja" #'my-get-api-key nil)
 ```
 

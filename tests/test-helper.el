@@ -100,7 +100,7 @@
   (unless poly-translate-test-original-url-retrieve
     (setq poly-translate-test-original-url-retrieve
           (symbol-function 'poly-translate-backend-url-retrieve)))
-  
+
   (fset 'poly-translate-backend-url-retrieve
         (lambda (url callback error-callback &rest args)
           (let ((response (alist-get url poly-translate-test-mock-responses nil nil #'string=)))
