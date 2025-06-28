@@ -65,7 +65,7 @@
 
 (defcustom poly-translate-engine-prefix "▶ "
   "Prefix for engine names in translation results.
-Use \"\" for no prefix, or customize with other symbols like \"[%d] \" for numbering."
+Use \\\"\\\" for no prefix, or customize with other symbols."
   :type 'string
   :group 'poly-translate)
 
@@ -497,8 +497,7 @@ In multiple engines mode, returns the first non-error translation."
       ;; Single engine retranslation
       (poly-translate--do-translate new-text poly-translate-current-engine)
     ;; Multiple engines retranslation
-    (let ((engines (poly-translate-list-engines)))
-      (poly-translate--do-translate-all-engines new-text))))
+    (poly-translate--do-translate-all-engines new-text)))
 
 ;; Commands in result buffer
 (defun poly-translate-yank-translation ()

@@ -27,10 +27,22 @@
 ;;; Code:
 
 (require 'poly-translate-backend)
+(require 'poly-translate-core)
+(require 'cl-lib)
 
 ;; Optional dependency on gptel
 (defvar gptel-available-p nil
   "Whether gptel is available.")
+
+;; Declare external variables
+(defvar gptel-model)
+(defvar gptel-backend)
+
+;; Declare external functions
+(declare-function gptel-request "gptel" (prompt &rest args))
+(declare-function gptel-make-openai "gptel" (name &rest args))
+(declare-function gptel-make-anthropic "gptel" (name &rest args))
+(declare-function gptel-make-gemini "gptel" (name &rest args))
 
 (condition-case nil
     (progn
@@ -130,36 +142,34 @@
                               :stream (if stream t nil))))))))
 
 ;; Backend implementations
-(cl-defmethod poly-translate-backend-translate ((backend (eql llm-openai)) text from-lang to-lang config callback error-callback)
+(cl-defmethod poly-translate-backend-translate ((_backend (eql llm-openai)) text from-lang to-lang config callback error-callback)
   "Translate TEXT using OpenAI via gptel."
   (poly-translate-llm-translate 'openai text from-lang to-lang config callback error-callback))
 
-(cl-defmethod poly-translate-backend-translate ((backend (eql llm-anthropic)) text from-lang to-lang config callback error-callback)
+(cl-defmethod poly-translate-backend-translate ((_backend (eql llm-anthropic)) text from-lang to-lang config callback error-callback)
   "Translate TEXT using Anthropic Claude via gptel."
   (poly-translate-llm-translate 'anthropic text from-lang to-lang config callback error-callback))
 
-(cl-defmethod poly-translate-backend-translate ((backend (eql llm-gemini)) text from-lang to-lang config callback error-callback)
+(cl-defmethod poly-translate-backend-translate ((_backend (eql llm-gemini)) text from-lang to-lang config callback error-callback)
   "Translate TEXT using Gemini via gptel."
   (poly-translate-llm-translate 'gemini text from-lang to-lang config callback error-callback))
 
 (defun poly-translate-llm-translate (provider text from-lang to-lang config callback error-callback)
   "Generic LLM translation function."
-  (unless gptel-available-p
-    (funcall error-callback "gptel is not available. Please install gptel package.")
-    (return-from poly-translate-llm-translate))
-
-  ;; Check cache first
-  (let ((cached (poly-translate-backend-cache-get provider text from-lang to-lang)))
-    (when cached
-      (funcall callback cached)
-      (return-from poly-translate-llm-translate)))
-
-  ;; Check rate limit (more conservative for LLMs)
-  (unless (poly-translate-backend-check-rate-limit provider 10 60) ; 10 requests per minute
-    (funcall error-callback (format "Rate limit exceeded for %s" provider))
-    (return-from poly-translate-llm-translate))
-
-  (let* ((style (or (plist-get config :style) 'default))
+  (cond
+   ((not gptel-available-p)
+    (funcall error-callback "gptel is not available. Please install gptel package."))
+   
+   ;; Check cache first
+   ((poly-translate-backend-cache-get provider text from-lang to-lang)
+    (funcall callback (poly-translate-backend-cache-get provider text from-lang to-lang)))
+   
+   ;; Check rate limit (more conservative for LLMs)
+   ((not (poly-translate-backend-check-rate-limit provider 10 60)) ; 10 requests per minute
+    (funcall error-callback (format "Rate limit exceeded for %s" provider)))
+   
+   (t
+    (let* ((style (or (plist-get config :style) 'default))
          (prompt (poly-translate-llm-build-prompt text from-lang to-lang style))
          (old-backend gptel-backend)
          (old-model gptel-model))
@@ -187,10 +197,10 @@
 
     ;; Restore original backend/model
     (setq gptel-backend old-backend
-          gptel-model old-model)))
+          gptel-model old-model)))))
 
 ;; Validation methods
-(cl-defmethod poly-translate-backend-validate-config ((backend (eql llm-openai)) config)
+(cl-defmethod poly-translate-backend-validate-config ((_backend (eql llm-openai)) config)
   "Validate OpenAI configuration."
   (let ((api-key-raw (plist-get config :api-key)))
     (unless (or (stringp api-key-raw) (functionp api-key-raw))
@@ -198,7 +208,7 @@
               '("OpenAI backend requires :api-key in configuration"))))
   t)
 
-(cl-defmethod poly-translate-backend-validate-config ((backend (eql llm-anthropic)) config)
+(cl-defmethod poly-translate-backend-validate-config ((_backend (eql llm-anthropic)) config)
   "Validate Anthropic configuration."
   (let ((api-key-raw (plist-get config :api-key)))
     (unless (or (stringp api-key-raw) (functionp api-key-raw))
@@ -206,7 +216,7 @@
               '("Anthropic backend requires :api-key in configuration"))))
   t)
 
-(cl-defmethod poly-translate-backend-validate-config ((backend (eql llm-gemini)) config)
+(cl-defmethod poly-translate-backend-validate-config ((_backend (eql llm-gemini)) config)
   "Validate Gemini configuration."
   (let ((api-key-raw (plist-get config :api-key)))
     (unless (or (stringp api-key-raw) (functionp api-key-raw))
@@ -233,7 +243,7 @@
 (defun poly-translate-register-llm-engine (name provider input-lang output-lang api-key &optional model style)
   "Register an LLM engine.
 NAME is the engine name.
-PROVIDER is the LLM provider ('openai, 'anthropic, or 'gemini).
+PROVIDER is the LLM provider (\\='openai, \\='anthropic, or \\='gemini).
 INPUT-LANG is the source language.
 OUTPUT-LANG is the target language.
 API-KEY is the API key.

@@ -27,8 +27,10 @@
 ;;; Code:
 
 (require 'poly-translate-backend)
+(require 'poly-translate-core)
 (require 'url)
 (require 'json)
+(require 'cl-lib)
 
 ;; Constants
 (defconst poly-translate-deepl-api-url-free "https://api-free.deepl.com/v2/translate"
@@ -101,29 +103,27 @@
                       (funcall api-key-raw)
                     api-key-raw))
 
-    (when poly-translate-debug
+    (when (bound-and-true-p poly-translate-debug)
       (message "DeepL API key debug:")
       (message "  Raw: %s (type: %s)" api-key-raw (type-of api-key-raw))
       (message "  Final: %s (type: %s)"
                (if api-key (concat (substring api-key 0 8) "...") "nil")
                (type-of api-key)))
 
-    (unless api-key
-      (funcall error-callback "DeepL API key not configured")
-      (return-from poly-translate-backend-translate))
-
-    ;; Check cache first
-    (let ((cached (poly-translate-backend-cache-get backend text from-lang to-lang)))
-      (when cached
-        (funcall callback cached)
-        (return-from poly-translate-backend-translate)))
-
-    ;; Check rate limit (500,000 characters per month for free)
-    (unless (poly-translate-backend-check-rate-limit backend 100 60) ; 100 requests per minute
-      (funcall error-callback "Rate limit exceeded for DeepL")
-      (return-from poly-translate-backend-translate))
-
-    (let* ((url (poly-translate-deepl-get-api-url config))
+    (cond
+     ((not api-key)
+      (funcall error-callback "DeepL API key not configured"))
+     
+     ;; Check cache first
+     ((poly-translate-backend-cache-get backend text from-lang to-lang)
+      (funcall callback (poly-translate-backend-cache-get backend text from-lang to-lang)))
+     
+     ;; Check rate limit (500,000 characters per month for free)
+     ((not (poly-translate-backend-check-rate-limit backend 100 60)) ; 100 requests per minute
+      (funcall error-callback "Rate limit exceeded for DeepL"))
+     
+     (t
+      (let* ((url (poly-translate-deepl-get-api-url config))
            (source-lang (unless (string= from-lang "auto")
                           (poly-translate-deepl-get-language-code from-lang)))
            (target-lang (poly-translate-deepl-get-language-code to-lang))
@@ -136,7 +136,7 @@
            (data (poly-translate-backend-encode-url-params params)))
 
       ;; Debug logging
-      (when poly-translate-debug
+      (when (bound-and-true-p poly-translate-debug)
         (message "DeepL API Debug:")
         (message "  URL: %s" url)
         (message "  Pro mode: %s" (plist-get config :pro))
@@ -163,13 +163,13 @@
             (funcall error-callback (format "Error parsing response: %s" err)))))
        (lambda (err)
          (funcall error-callback (format "DeepL API error: %s" err)))
-       "POST" data headers))))
+       "POST" data headers))))))
 
-(cl-defmethod poly-translate-backend-detect-language ((backend (eql deepl)) text callback error-callback)
+(cl-defmethod poly-translate-backend-detect-language ((_backend (eql deepl)) text callback error-callback)
   "Detect language using built-in detection (DeepL auto-detects)."
   (poly-translate-detect-language text callback error-callback))
 
-(cl-defmethod poly-translate-backend-validate-config ((backend (eql deepl)) config)
+(cl-defmethod poly-translate-backend-validate-config ((_backend (eql deepl)) config)
   "Validate DeepL configuration."
   (unless (plist-get config :api-key)
     (signal 'poly-translate-config-error
