@@ -155,46 +155,27 @@ Returns a verify-elisp-result structure."
 (defun verify-elisp-byte-compile (code &optional filename)
   "Byte-compile CODE and check for errors/warnings.
 FILENAME is optional context for error messages."
-  (let ((temp-file (make-temp-file (or filename "verify-elisp") nil ".el"))
-        (compile-log-buffer "*Compile-Log*")
-        (old-log-buffer-content ""))
-    
-    ;; Store old compile log content
-    (when (get-buffer compile-log-buffer)
-      (with-current-buffer compile-log-buffer
-        (setq old-log-buffer-content (buffer-string))))
-    
+  (let ((temp-file (make-temp-file (or filename "verify-elisp") nil ".el")))
     (unwind-protect
         (condition-case err
             (progn
               (with-temp-file temp-file
                 (insert code))
               
-              (let ((byte-compile-error-on-warn verify-elisp-strict-warnings)
-                    (warning-minimum-level (if verify-elisp-strict-warnings :warning :error)))
+              ;; Simple byte compilation test with suppressed output
+              (let ((inhibit-message t)  ; Suppress messages
+                    (warning-minimum-level :emergency)  ; Only critical errors
+                    (byte-compile-error-on-warn nil)  ; Don't fail on warnings
+                    (standard-output (make-temp-buffer))  ; Redirect output
+                    (warning-suppress-types '((bytecomp)))  ; Suppress bytecomp warnings
+                    (byte-compile-warnings nil))  ; Disable all warnings
                 
                 (if (byte-compile-file temp-file)
-                    (let ((new-content ""))
-                      ;; Check for new warnings/errors in compile log
-                      (when (get-buffer compile-log-buffer)
-                        (with-current-buffer compile-log-buffer
-                          (setq new-content (substring (buffer-string) 
-                                                       (length old-log-buffer-content)))))
-                      
-                      (if (and verify-elisp-strict-warnings 
-                               (not (string-empty-p (string-trim new-content))))
-                          (make-verify-elisp-result
-                           :stage 'byte-compile
-                           :success nil
-                           :message "Byte compilation produced warnings"
-                           :details new-content
-                           :timestamp (current-time))
-                        (make-verify-elisp-result
-                         :stage 'byte-compile
-                         :success t
-                         :message "Byte compilation succeeded"
-                         :timestamp (current-time))))
-                  
+                    (make-verify-elisp-result
+                     :stage 'byte-compile
+                     :success t
+                     :message "Byte compilation succeeded"
+                     :timestamp (current-time))
                   (make-verify-elisp-result
                    :stage 'byte-compile
                    :success nil

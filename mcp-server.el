@@ -80,13 +80,7 @@ FILENAME is used for the temporary file name."
   "Safely evaluate CODE in a restricted environment.
 Returns (success . result) where success is t/nil and result is the value/error."
   ;; Create a minimal environment for evaluation
-  (let ((safe-functions '(+ - * / = < > <= >= and or not
-                           car cdr cons list append length
-                           numberp stringp symbolp listp
-                           format concat substring string-match
-                           plist-get plist-put
-                           make-hash-table gethash puthash))
-        (inhibit-message t))
+  (let ((inhibit-message t))
     (condition-case err
         (let ((result (eval (read code))))
           (cons t (format "%S" result)))
@@ -123,7 +117,8 @@ Returns a plist with validation results."
     (nreverse results)))
 
 ;; MCP Tools Registration
-(when poly-translate-mcp-available-p
+(when (and poly-translate-mcp-available-p
+           (fboundp 'mcp-server-lib-register-tool))
   
   ;; Tool: Validate Elisp Syntax
   (mcp-server-lib-register-tool #'poly-translate-mcp-validate-syntax
@@ -143,7 +138,12 @@ Returns a plist with validation results."
 ;; MCP Tool implementations
 (defun poly-translate-mcp-validate-syntax (code)
   "MCP tool to validate elisp syntax."
-  (mcp-server-lib-with-error-handling
+  (if (fboundp 'mcp-server-lib-with-error-handling)
+      (mcp-server-lib-with-error-handling
+        (let ((result (poly-translate-validate-syntax code)))
+          (format "%s: %s" 
+                  (if (car result) "SUCCESS" "FAILED")
+                  (cdr result))))
     (let ((result (poly-translate-validate-syntax code)))
       (format "%s: %s" 
               (if (car result) "SUCCESS" "FAILED")
@@ -151,7 +151,18 @@ Returns a plist with validation results."
 
 (defun poly-translate-mcp-validate-full (code &optional filename)
   "MCP tool to perform full elisp validation."
-  (mcp-server-lib-with-error-handling
+  (if (fboundp 'mcp-server-lib-with-error-handling)
+      (mcp-server-lib-with-error-handling
+        (let ((results (poly-translate-validate-full code filename))
+              (output ""))
+          (dolist (result results)
+            (setq output 
+                  (concat output
+                          (format "%s %s: %s\n"
+                                  (plist-get result :stage)
+                                  (if (plist-get result :success) "✓" "✗")
+                                  (plist-get result :message)))))
+          output))
     (let ((results (poly-translate-validate-full code filename))
           (output ""))
       (dolist (result results)
@@ -165,7 +176,13 @@ Returns a plist with validation results."
 
 (defun poly-translate-mcp-eval-elisp (code)
   "MCP tool to evaluate elisp code."
-  (mcp-server-lib-with-error-handling
+  (if (fboundp 'mcp-server-lib-with-error-handling)
+      (mcp-server-lib-with-error-handling
+        (condition-case err
+            (let ((result (eval (read code))))
+              (format "SUCCESS: %S" result))
+          (error 
+           (format "ERROR: %s" (error-message-string err)))))
     (condition-case err
         (let ((result (eval (read code))))
           (format "SUCCESS: %S" result))
@@ -206,7 +223,8 @@ Returns a plist with validation results."
 (defun poly-translate-start-mcp-server ()
   "Start the MCP server for elisp validation."
   (interactive)
-  (if poly-translate-mcp-available-p
+  (if (and poly-translate-mcp-available-p
+           (fboundp 'mcp-server-lib-start))
       (progn
         (mcp-server-lib-start :stdio)
         (message "Poly-translate MCP server started"))
