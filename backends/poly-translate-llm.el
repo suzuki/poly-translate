@@ -87,7 +87,7 @@
         (host (plist-get config :host))
         (stream (plist-get config :stream))
         api-key)
-    
+
     ;; Handle function or string API key
     (setq api-key (if (functionp api-key-raw)
                       (funcall api-key-raw)

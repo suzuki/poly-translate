@@ -95,19 +95,19 @@
   "Translate TEXT using DeepL API."
   (let ((api-key-raw (plist-get config :api-key))
         api-key)
-    
+
     ;; Handle function or string API key
     (setq api-key (if (functionp api-key-raw)
                       (funcall api-key-raw)
                     api-key-raw))
-    
+
     (when poly-translate-debug
       (message "DeepL API key debug:")
       (message "  Raw: %s (type: %s)" api-key-raw (type-of api-key-raw))
-      (message "  Final: %s (type: %s)" 
+      (message "  Final: %s (type: %s)"
                (if api-key (concat (substring api-key 0 8) "...") "nil")
                (type-of api-key)))
-    
+
     (unless api-key
       (funcall error-callback "DeepL API key not configured")
       (return-from poly-translate-backend-translate))
@@ -134,7 +134,7 @@
            (headers `(("Authorization" . ,(format "DeepL-Auth-Key %s" api-key))
                       ("Content-Type" . "application/x-www-form-urlencoded")))
            (data (poly-translate-backend-encode-url-params params)))
-      
+
       ;; Debug logging
       (when poly-translate-debug
         (message "DeepL API Debug:")

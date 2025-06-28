@@ -270,12 +270,12 @@
 (ert-deftest poly-translate-test-function-api-key ()
   "Test API key function handling."
   (poly-translate-test-setup)
-  
+
   ;; Create a test function that returns an API key
   (defun test-api-key-function ()
     "Test function that returns an API key."
     "test-api-key-12345")
-  
+
   ;; Test with function API key
   (let ((config '(:api-key test-api-key-function :pro nil)))
     ;; Simulate DeepL's API key processing
@@ -285,7 +285,7 @@
                         (funcall api-key-raw)
                       api-key-raw))
       (should (string= api-key "test-api-key-12345"))))
-  
+
   ;; Test with string API key
   (let ((config '(:api-key "string-api-key" :pro nil)))
     (let ((api-key-raw (plist-get config :api-key))
@@ -294,7 +294,7 @@
                         (funcall api-key-raw)
                       api-key-raw))
       (should (string= api-key "string-api-key"))))
-  
+
   (poly-translate-test-teardown))
 
 ;;; Configuration tests

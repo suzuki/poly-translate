@@ -174,12 +174,12 @@ make test-one TEST=poly-translate-test-engine-registration
    ```elisp
    (defconst poly-translate-backend-my-backend 'my-backend
      "Symbol for my custom backend.")
-   
+
    (defun poly-translate-backend-my-backend-translate (text from-lang to-lang config callback error-callback)
      "Translate TEXT from FROM-LANG to TO-LANG using my backend."
      ;; Implementation here
      )
-   
+
    (defun poly-translate-backend-my-backend-validate-config (config)
      "Validate CONFIG for my backend."
      ;; Return t if valid, nil otherwise
@@ -187,7 +187,7 @@ make test-one TEST=poly-translate-test-engine-registration
    ```
 3. Register the backend:
    ```elisp
-   (poly-translate-register-backend 
+   (poly-translate-register-backend
     'my-backend
     `(:translate ,#'poly-translate-backend-my-backend-translate
       :validate-config ,#'poly-translate-backend-my-backend-validate-config))

@@ -44,7 +44,7 @@
   (let ((config '(:pro nil)))
     (should (string= (poly-translate-deepl-get-api-url config)
                      "https://api-free.deepl.com/v2/translate")))
-  
+
   ;; Pro account
   (let ((config '(:pro t)))
     (should (string= (poly-translate-deepl-get-api-url config)
@@ -53,19 +53,19 @@
 (ert-deftest poly-translate-test-deepl-api-key-handling ()
   "Test DeepL API key processing."
   (poly-translate-test-setup)
-  
+
   ;; Mock the backend translate method to capture the API key
   (let ((captured-api-key nil))
     (cl-letf (((symbol-function 'poly-translate-backend-url-retrieve)
                (lambda (url callback error-callback &rest args)
                  ;; Don't actually make HTTP request
                  (funcall error-callback "Mocked request"))))
-      
+
       ;; Test function API key
       (defun test-deepl-api-key ()
         "Test function that returns DeepL API key."
         "test-deepl-key-123:fx")
-      
+
       (let ((config `(:api-key test-deepl-api-key :pro nil)))
         (condition-case err
             (poly-translate-backend-translate
@@ -73,27 +73,27 @@
              (lambda (result) nil)
              (lambda (error) (setq captured-api-key error)))
           (error nil))))
-    
+
     ;; Since we mocked the HTTP request, we can't directly test the API key
     ;; but we can test that the function was called without errors
     (should t))
-  
+
   (poly-translate-test-teardown))
 
 (ert-deftest poly-translate-test-deepl-engine-registration ()
   "Test DeepL engine registration."
   (poly-translate-test-setup)
-  
+
   ;; Register DeepL engine
   (poly-translate-register-deepl-engine
    "Test DeepL" "en" "ja" "test-key" nil)
-  
+
   (let ((engine (poly-translate-get-engine "Test DeepL")))
     (should engine)
     (should (eq (poly-translate-engine-backend engine) 'deepl))
     (should (string= (poly-translate-engine-input-lang engine) "en"))
     (should (string= (poly-translate-engine-output-lang engine) "ja")))
-  
+
   (poly-translate-test-teardown))
 
 ;;; Google Backend Tests
@@ -107,12 +107,12 @@
 (ert-deftest poly-translate-test-google-api-key-handling ()
   "Test Google API key processing."
   (poly-translate-test-setup)
-  
+
   ;; Test function API key
   (defun test-google-api-key ()
     "Test function that returns Google API key."
     "AIzaSyTest123456789")
-  
+
   (let ((config `(:api-key test-google-api-key)))
     ;; Mock the HTTP request to avoid actual API call
     (cl-letf (((symbol-function 'poly-translate-backend-url-retrieve)
@@ -124,13 +124,13 @@
            (lambda (result) nil)
            (lambda (error) nil))
         (error nil))))
-  
+
   (poly-translate-test-teardown))
 
 (ert-deftest poly-translate-test-google-engine-registration ()
   "Test Google engine registration."
   (poly-translate-test-setup)
-  
+
   ;; Manually register Google engine
   (poly-translate-register-engine
    '(:name "Test Google"
@@ -138,13 +138,13 @@
      :input-lang "en"
      :output-lang "ja"
      :api-key "test-key"))
-  
+
   (let ((engine (poly-translate-get-engine "Test Google")))
     (should engine)
     (should (eq (poly-translate-engine-backend engine) 'google))
     (should (string= (poly-translate-engine-input-lang engine) "en"))
     (should (string= (poly-translate-engine-output-lang engine) "ja")))
-  
+
   (poly-translate-test-teardown))
 
 ;;; LLM Backend Tests
@@ -163,7 +163,7 @@
   (defun test-openai-api-key ()
     "Test function that returns OpenAI API key."
     "sk-test123456789")
-  
+
   (let ((config `(:provider openai
                   :api-key test-openai-api-key
                   :model "gpt-4")))
@@ -177,16 +177,16 @@
   ;; Valid string API key
   (let ((config '(:api-key "sk-test123" :provider openai)))
     (should (poly-translate-backend-validate-config 'llm-openai config)))
-  
+
   ;; Valid function API key
   (defun test-api-key-func () "sk-test123")
   (let ((config '(:api-key test-api-key-func :provider openai)))
     (should (poly-translate-backend-validate-config 'llm-openai config)))
-  
+
   ;; Invalid API key (nil)
   (let ((config '(:provider openai)))
     (should-error (poly-translate-backend-validate-config 'llm-openai config)))
-  
+
   ;; Invalid API key (number)
   (let ((config '(:api-key 123 :provider openai)))
     (should-error (poly-translate-backend-validate-config 'llm-openai config))))
@@ -194,7 +194,7 @@
 (ert-deftest poly-translate-test-llm-engine-registration ()
   "Test LLM engine registration."
   (poly-translate-test-setup)
-  
+
   ;; Manually register OpenAI engine
   (poly-translate-register-engine
    '(:name "Test OpenAI"
@@ -203,13 +203,13 @@
      :output-lang "ja"
      :api-key "test-key"
      :provider openai))
-  
+
   (let ((engine (poly-translate-get-engine "Test OpenAI")))
     (should engine)
     (should (eq (poly-translate-engine-backend engine) 'llm-openai))
     (should (string= (poly-translate-engine-input-lang engine) "en"))
     (should (string= (poly-translate-engine-output-lang engine) "ja")))
-  
+
   (poly-translate-test-teardown))
 
 ;;; Backend Integration Tests
@@ -217,20 +217,20 @@
 (ert-deftest poly-translate-test-backend-error-handling ()
   "Test backend error handling."
   (poly-translate-test-setup)
-  
+
   ;; Register mock backend that always fails
   (poly-translate-register-backend
    'failing-backend
    `(:translate ,(lambda (backend text from-lang to-lang config callback error-callback)
                    (funcall error-callback "Simulated backend failure"))
      :validate-config ,(lambda (backend config) t)))
-  
+
   (poly-translate-register-engine
    '(:name "Failing Engine"
      :backend failing-backend
      :input-lang "en"
      :output-lang "ja"))
-  
+
   ;; Test that error is properly handled
   (let ((error-result nil))
     (poly-translate-with-engine
@@ -238,16 +238,16 @@
      "test text"
      (lambda (result) (error "Should not succeed"))
      (lambda (err) (setq error-result err)))
-    
+
     (should error-result)
     (poly-translate-test-should-contain error-result "Simulated backend failure"))
-  
+
   (poly-translate-test-teardown))
 
 (ert-deftest poly-translate-test-backend-timeout ()
   "Test backend timeout handling."
   (poly-translate-test-setup)
-  
+
   ;; Register mock backend that never responds
   (poly-translate-register-backend
    'slow-backend
@@ -255,18 +255,18 @@
                    ;; Don't call either callback to simulate timeout
                    nil)
      :validate-config ,(lambda (backend config) t)))
-  
+
   (poly-translate-register-engine
    '(:name "Slow Engine"
      :backend slow-backend
      :input-lang "en"
      :output-lang "ja"))
-  
+
   ;; This would normally timeout in real usage
   ;; For testing, we just verify the setup works
   (let ((engine (poly-translate-get-engine "Slow Engine")))
     (should engine))
-  
+
   (poly-translate-test-teardown))
 
 (provide 'poly-translate-backend-test)

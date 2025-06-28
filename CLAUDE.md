@@ -72,7 +72,7 @@ Consider these existing implementations for design patterns:
 ### Trailing Newlines
 **IMPORTANT**: All text files MUST end with a newline character. This includes:
 - All `.el` (Emacs Lisp) files
-- All `.yml`/`.yaml` (YAML) files  
+- All `.yml`/`.yaml` (YAML) files
 - All `.md` (Markdown) files
 - All configuration files
 - All documentation files
@@ -84,6 +84,24 @@ This follows POSIX standards and prevents issues with:
 - Makefile processing
 
 When creating or editing files, always ensure they end with a newline character.
+
+### Whitespace Standards
+**IMPORTANT**: Keep files clean from unnecessary whitespace:
+
+#### Trailing Whitespace
+- **NO trailing spaces** at the end of any line
+- **NO spaces in empty lines** - empty lines should contain only the newline character
+- Trailing whitespace causes issues with:
+  - Git diffs showing unnecessary changes
+  - Editor warnings and linting tools
+  - Inconsistent file formatting
+  - Version control noise
+
+#### Line Endings
+- Use Unix-style line endings (`\n`) consistently
+- Avoid Windows-style line endings (`\r\n`) or old Mac-style (`\r`)
+
+When creating or editing files, always remove trailing whitespace and ensure empty lines contain no spaces.
 
 ## Important Instructions
 
