@@ -42,7 +42,6 @@
 (declare-function poly-translate-save-translation "poly-translate-ui" ())
 (declare-function poly-translate--do-translate "poly-translate-ui" (text engine &optional to-kill-ring))
 (declare-function poly-translate--select-engine "poly-translate-ui" ())
-(declare-function poly-translate--get-result-buffer "poly-translate-ui" ())
 (declare-function poly-translate--display-multiple-results-init "poly-translate-ui" (buffer text engines))
 (declare-function poly-translate--update-multiple-results "poly-translate-ui" (buffer engine translation))
 (declare-function poly-translate--finalize-multiple-results "poly-translate-ui" (buffer))
@@ -138,6 +137,18 @@ If ENGINE is not specified, use the default engine or prompt user."
   (let ((engine (or engine (poly-translate--select-engine))))
     (poly-translate--do-translate text engine)))
 
+;; Helper functions
+(defun poly-translate--get-result-buffer ()
+  "Get or create the translation result buffer."
+  (let ((buffer (get-buffer-create poly-translate-buffer-name)))
+    (with-current-buffer buffer
+      (unless (eq major-mode 'poly-translate-mode)
+        (poly-translate-mode))
+      ;; Ensure proper encoding for multi-language support
+      (set-buffer-file-coding-system 'utf-8)
+      (setq buffer-file-coding-system 'utf-8))
+    buffer))
+
 ;; Translation execution
 (defun poly-translate--do-translate-all-engines (text &optional to-kill-ring)
   "Translate TEXT using all registered engines.
@@ -216,16 +227,6 @@ If TO-KILL-RING is non-nil, add result to kill ring instead of showing buffer."
         poly-translate-default-engine
       (completing-read "Translation engine: " engines nil t))))
 
-(defun poly-translate--get-result-buffer ()
-  "Get or create the translation result buffer."
-  (let ((buffer (get-buffer-create poly-translate-buffer-name)))
-    (with-current-buffer buffer
-      (unless (eq major-mode 'poly-translate-mode)
-        (poly-translate-mode))
-      ;; Ensure proper encoding for multi-language support
-      (set-buffer-file-coding-system 'utf-8)
-      (setq buffer-file-coding-system 'utf-8))
-    buffer))
 
 ;; Multiple results display functions
 (defun poly-translate--display-multiple-results-init (buffer text engines)

@@ -108,10 +108,20 @@ If nil, user will be prompted to select a single engine."
 
 ;; Load available backends
 (with-eval-after-load 'poly-translate
-  (let ((backends-dir (expand-file-name "backends"
-                                        (file-name-directory
-                                         (or load-file-name buffer-file-name)))))
-    (when (file-directory-p backends-dir)
+  (let* ((file-name (or load-file-name buffer-file-name))
+         (backends-dir (cond
+                        ;; If we have a file name, use its directory
+                        (file-name
+                         (expand-file-name "backends"
+                                           (file-name-directory file-name)))
+                        ;; Otherwise, try to find poly-translate.el in load-path
+                        ((locate-library "poly-translate")
+                         (expand-file-name "backends"
+                                           (file-name-directory
+                                            (locate-library "poly-translate"))))
+                        ;; Last resort: current directory
+                        (t (expand-file-name "backends")))))
+    (when (and backends-dir (file-directory-p backends-dir))
       (dolist (file (directory-files backends-dir t "\\.el\\'"))
         (condition-case err
             (load file nil t)
