@@ -177,6 +177,39 @@ ERROR-CALLBACK is called with error message on failure."
                (t "en"))))
     (funcall callback lang)))
 
+;; Language pair management functions
+(defun poly-translate-list-language-pairs-for-backend (backend)
+  "Return a list of language pairs for BACKEND.
+Each element is a cons cell (INPUT-LANG . OUTPUT-LANG)."
+  (let ((pairs nil))
+    (maphash (lambda (_name engine)
+               (when (eq (poly-translate-engine-backend engine) backend)
+                 (let ((input-lang (poly-translate-engine-input-lang engine))
+                       (output-lang (poly-translate-engine-output-lang engine)))
+                   (cl-pushnew (cons input-lang output-lang) pairs :test #'equal))))
+             poly-translate-engines)
+    (sort pairs (lambda (a b)
+                  (string< (format "%s-%s" (car a) (cdr a))
+                           (format "%s-%s" (car b) (cdr b)))))))
+
+(defun poly-translate-find-engine-for-language-pair (backend input-lang output-lang)
+  "Find an engine using BACKEND with INPUT-LANG to OUTPUT-LANG.
+Returns the engine name if found, nil otherwise."
+  (catch 'found
+    (maphash (lambda (name engine)
+               (when (and (eq (poly-translate-engine-backend engine) backend)
+                          (string= (poly-translate-engine-input-lang engine) input-lang)
+                          (string= (poly-translate-engine-output-lang engine) output-lang))
+                 (throw 'found name)))
+             poly-translate-engines)
+    nil))
+
+(defun poly-translate-format-language-pair (input-lang output-lang)
+  "Format language pair for display."
+  (format "%s → %s"
+          (poly-translate-language-name input-lang)
+          (poly-translate-language-name output-lang)))
+
 ;; Utility functions
 (defun poly-translate-language-name (code)
   "Get the display name for language CODE."

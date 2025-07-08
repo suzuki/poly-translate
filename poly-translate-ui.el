@@ -100,6 +100,8 @@ Use \\\"\\\" for no prefix, or customize with other symbols."
     (define-key map "y" #'poly-translate-yank-translation)
     (define-key map "e" #'poly-translate-toggle-edit-original)
     (define-key map "c" #'poly-translate-change-engine)
+    (define-key map "l" 'poly-translate-switch-language-pair)
+
     (define-key map "s" #'poly-translate-save-translation)
     (define-key map (kbd "C-c C-c") #'poly-translate--finish-edit-original)
     (define-key map (kbd "C-c C-k") #'poly-translate--cancel-edit-original)
@@ -141,6 +143,56 @@ If TO-KILL-RING is non-nil, add result to kill ring instead of showing buffer."
              (member poly-translate-default-engine engines))
         poly-translate-default-engine
       (completing-read "Translation engine: " engines nil t))))
+
+(defun poly-translate--switch-to-language-pair (backend)
+  "Switch to a different language pair for BACKEND."
+  (let* ((language-pairs (poly-translate-list-language-pairs-for-backend backend))
+         (current-engine-obj (poly-translate-get-engine poly-translate-current-engine))
+         (current-input (poly-translate-engine-input-lang current-engine-obj))
+         (current-output (poly-translate-engine-output-lang current-engine-obj))
+         (current-pair (cons current-input current-output)))
+
+    (when (null language-pairs)
+      (error "No language pairs available for backend %s" backend))
+
+    (when (= (length language-pairs) 1)
+      (error "Only one language pair available for backend %s" backend))
+
+    ;; Create choices list with formatted language pairs
+    (let* ((choices (mapcar (lambda (pair)
+                              (let ((input (car pair))
+                                    (output (cdr pair)))
+                                (cons (poly-translate-format-language-pair input output)
+                                      pair)))
+                            language-pairs))
+           ;; Filter out current language pair
+           (filtered-choices (seq-remove (lambda (choice)
+                                           (equal (cdr choice) current-pair))
+                                         choices)))
+
+      (when (null filtered-choices)
+        (error "No other language pairs available for backend %s" backend))
+
+      ;; Prompt user to select new language pair
+      (let* ((selected-display (completing-read
+                                (format "Switch language pair (current: %s): "
+                                        (poly-translate-format-language-pair current-input current-output))
+                                (mapcar #'car filtered-choices)
+                                nil t))
+             (selected-pair (cdr (assoc selected-display filtered-choices)))
+             (new-input (car selected-pair))
+             (new-output (cdr selected-pair))
+             (new-engine (poly-translate-find-engine-for-language-pair backend new-input new-output)))
+
+        (if new-engine
+            (progn
+              (setq poly-translate-current-engine new-engine)
+              (poly-translate--do-translate poly-translate-original-text new-engine)
+              (message "Switched to language pair: %s" selected-display))
+          (error "No engine found for language pair %s → %s with backend %s"
+                 (poly-translate-language-name new-input)
+                 (poly-translate-language-name new-output)
+                 backend))))))
 
 ;; Interactive commands
 ;;;###autoload
@@ -217,11 +269,11 @@ If ENGINE is not specified, use the default engine or prompt user."
         (insert text)
         (setq poly-translate--original-end (point))
         ;; Mark original text as read-only initially
-        (put-text-property poly-translate--original-start 
-                           poly-translate--original-end 
+        (put-text-property poly-translate--original-start
+                           poly-translate--original-end
                            'read-only t)
-        (put-text-property poly-translate--original-start 
-                           poly-translate--original-end 
+        (put-text-property poly-translate--original-start
+                           poly-translate--original-end
                            'poly-translate-section 'original)
         (insert "\n\n")
         (insert poly-translate-separator-main "\n\n"))
@@ -243,7 +295,7 @@ If ENGINE is not specified, use the default engine or prompt user."
                                   'engine-name engine) "\n")))))
 
       ;; Footer placeholder
-      (insert (propertize "Press 'q' to quit, 'g' to refresh, 'e' to edit original"
+      (insert (propertize "Press 'q' to quit, 'g' to refresh, 'e' to edit original, 'c' to change engine"
                           'face 'font-lock-comment-face))
 
       (goto-char (point-min))
@@ -310,11 +362,11 @@ If ENGINE is not specified, use the default engine or prompt user."
         (insert original)
         (setq poly-translate--original-end (point))
         ;; Mark original text as read-only initially
-        (put-text-property poly-translate--original-start 
-                           poly-translate--original-end 
+        (put-text-property poly-translate--original-start
+                           poly-translate--original-end
                            'read-only t)
-        (put-text-property poly-translate--original-start 
-                           poly-translate--original-end 
+        (put-text-property poly-translate--original-start
+                           poly-translate--original-end
                            'poly-translate-section 'original)
         (insert "\n\n")
         (insert poly-translate-separator-main "\n\n"))
@@ -336,7 +388,7 @@ If ENGINE is not specified, use the default engine or prompt user."
       (insert poly-translate-separator-engine "\n\n")
 
       ;; Footer
-      (insert (propertize "Press 'q' to quit, 'g' to refresh, 'y' to yank, 'e' to edit original, 'c' to change engine"
+      (insert (propertize "Press 'q' to quit, 'g' to refresh, 'y' to yank, 'e' to edit original, 'c' to change engine, 'l' to switch language pair"
                           'face 'font-lock-comment-face))
 
       (goto-char (point-min))
@@ -434,16 +486,16 @@ In multiple engines mode, returns the first non-error translation."
 
 (defun poly-translate--start-edit-original ()
   "Start editing the original text."
-  (when (and poly-translate--original-start 
+  (when (and poly-translate--original-start
              poly-translate--original-end)
     (let ((inhibit-read-only t))
       ;; Make original text editable
-      (put-text-property poly-translate--original-start 
-                         poly-translate--original-end 
+      (put-text-property poly-translate--original-start
+                         poly-translate--original-end
                          'read-only nil)
       ;; Add visual feedback
-      (put-text-property poly-translate--original-start 
-                         poly-translate--original-end 
+      (put-text-property poly-translate--original-start
+                         poly-translate--original-end
                          'face 'highlight)
       ;; Set edit mode flag
       (setq poly-translate--edit-mode t)
@@ -468,18 +520,18 @@ In multiple engines mode, returns the first non-error translation."
 (defun poly-translate--finish-edit-original ()
   "Finish editing original text and retranslate."
   (when poly-translate--edit-mode
-    (let ((new-text (buffer-substring-no-properties 
-                     poly-translate--original-start 
+    (let ((new-text (buffer-substring-no-properties
+                     poly-translate--original-start
                      poly-translate--original-end)))
       ;; Update original text variable
       (setq poly-translate-original-text new-text)
       ;; End edit mode
       (let ((inhibit-read-only t))
-        (put-text-property poly-translate--original-start 
-                           poly-translate--original-end 
+        (put-text-property poly-translate--original-start
+                           poly-translate--original-end
                            'read-only t)
-        (remove-text-properties poly-translate--original-start 
-                                poly-translate--original-end 
+        (remove-text-properties poly-translate--original-start
+                                poly-translate--original-end
                                 '(face nil)))
       (setq poly-translate--edit-mode nil)
       ;; Restore original keymap and read-only status
@@ -499,11 +551,11 @@ In multiple engines mode, returns the first non-error translation."
       (insert poly-translate-original-text)
       (setq poly-translate--original-end (point))
       ;; End edit mode
-      (put-text-property poly-translate--original-start 
-                         poly-translate--original-end 
+      (put-text-property poly-translate--original-start
+                         poly-translate--original-end
                          'read-only t)
-      (remove-text-properties poly-translate--original-start 
-                              poly-translate--original-end 
+      (remove-text-properties poly-translate--original-start
+                              poly-translate--original-end
                               '(face nil)))
     (setq poly-translate--edit-mode nil)
     ;; Restore original keymap and read-only status
@@ -536,6 +588,20 @@ In multiple engines mode, returns the first non-error translation."
   (when poly-translate-original-text
     (let ((new-engine (poly-translate--select-engine)))
       (poly-translate--do-translate poly-translate-original-text new-engine))))
+
+(defun poly-translate-switch-language-pair ()
+  "Switch to a different language pair using the same backend."
+  (interactive)
+  (unless poly-translate-original-text
+    (error "No original text to retranslate"))
+
+  (if poly-translate-current-engine
+      ;; Single engine mode
+      (let* ((current-engine-obj (poly-translate-get-engine poly-translate-current-engine))
+             (backend (poly-translate-engine-backend current-engine-obj)))
+        (poly-translate--switch-to-language-pair backend))
+    ;; Multiple engines mode - not supported for language pair switching
+    (error "Language pair switching is only available in single engine mode. Use 'c' to change engine instead.")))
 
 (defun poly-translate-refresh ()
   "Refresh the current translation."
