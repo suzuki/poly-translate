@@ -100,7 +100,7 @@ Use \\\"\\\" for no prefix, or customize with other symbols."
     (define-key map "y" #'poly-translate-yank-translation)
     (define-key map "e" #'poly-translate-toggle-edit-original)
     (define-key map "c" #'poly-translate-change-engine)
-    (define-key map "l" #'poly-translate-switch-language-pair)
+    (define-key map "l" 'poly-translate-switch-language-pair)
 
     (define-key map "s" #'poly-translate-save-translation)
     (define-key map (kbd "C-c C-c") #'poly-translate--finish-edit-original)
