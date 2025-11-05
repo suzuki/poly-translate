@@ -59,7 +59,10 @@
   (clrhash poly-translate-backends)
 
   ;; Clear cache
-  (poly-translate-backend-clear-cache))
+  (poly-translate-backend-clear-cache)
+
+  ;; Clear rate limits
+  (clrhash poly-translate-backend-rate-limits))
 
 (defun poly-translate-test-register-mock-engine (name backend input-lang output-lang)
   "Register a mock engine for testing."
