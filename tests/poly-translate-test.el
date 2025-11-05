@@ -310,5 +310,278 @@
   (should (boundp 'poly-translate-buffer-name))
   (should (boundp 'poly-translate-language-codes)))
 
+;;; Language Detection Edge Cases
+
+(ert-deftest poly-translate-test-language-detection-japanese ()
+  "Test Japanese language detection with different character types."
+  (poly-translate-test-setup)
+
+  ;; Test with hiragana
+  (let ((result nil))
+    (poly-translate-detect-language
+     "これはひらがなです"
+     (lambda (lang) (setq result lang))
+     (lambda (err) (error "Detection failed: %s" err)))
+    (should (string= result "ja")))
+
+  ;; Test with katakana
+  (let ((result nil))
+    (poly-translate-detect-language
+     "カタカナテスト"
+     (lambda (lang) (setq result lang))
+     (lambda (err) (error "Detection failed: %s" err)))
+    (should (string= result "ja")))
+
+  ;; Test with kanji
+  (let ((result nil))
+    (poly-translate-detect-language
+     "漢字混在文章"
+     (lambda (lang) (setq result lang))
+     (lambda (err) (error "Detection failed: %s" err)))
+    (should (string= result "ja")))
+
+  (poly-translate-test-teardown))
+
+(ert-deftest poly-translate-test-language-detection-other-languages ()
+  "Test language detection for various languages."
+  (poly-translate-test-setup)
+
+  ;; Test Korean
+  (let ((result nil))
+    (poly-translate-detect-language
+     "안녕하세요"
+     (lambda (lang) (setq result lang))
+     (lambda (err) (error "Detection failed: %s" err)))
+    (should (string= result "ko")))
+
+  ;; Test Arabic
+  (let ((result nil))
+    (poly-translate-detect-language
+     "مرحبا"
+     (lambda (lang) (setq result lang))
+     (lambda (err) (error "Detection failed: %s" err)))
+    (should (string= result "ar")))
+
+  ;; Test English (default)
+  (let ((result nil))
+    (poly-translate-detect-language
+     "Hello world"
+     (lambda (lang) (setq result lang))
+     (lambda (err) (error "Detection failed: %s" err)))
+    (should (string= result "en")))
+
+  (poly-translate-test-teardown))
+
+;;; Backend Listing Tests
+
+(ert-deftest poly-translate-test-list-backends ()
+  "Test backend listing functionality."
+  (poly-translate-test-setup)
+
+  ;; Register multiple backends
+  (poly-translate-test-register-mock-backend 'backend1)
+  (poly-translate-test-register-mock-backend 'backend2)
+  (poly-translate-test-register-mock-backend 'backend3)
+
+  (let ((backends (poly-translate-list-backends)))
+    (should (= (length backends) 3))
+    (should (member 'backend1 backends))
+    (should (member 'backend2 backends))
+    (should (member 'backend3 backends)))
+
+  (poly-translate-test-teardown))
+
+;;; Engine Information Tests
+
+(ert-deftest poly-translate-test-engine-config-storage ()
+  "Test that engine config is properly stored."
+  (poly-translate-test-setup)
+
+  (poly-translate-register-engine
+   '(:name "Test Engine"
+     :backend test-backend
+     :input-lang "ja"
+     :output-lang "en"
+     :api-key "test-key"
+     :custom-param "custom-value"))
+
+  (let* ((engine (poly-translate-get-engine "Test Engine"))
+         (config (poly-translate-engine-config engine)))
+    (should (plist-get config :api-key))
+    (should (string= (plist-get config :api-key) "test-key"))
+    (should (plist-get config :custom-param))
+    (should (string= (plist-get config :custom-param) "custom-value")))
+
+  (poly-translate-test-teardown))
+
+(ert-deftest poly-translate-test-engine-default-input-lang ()
+  "Test that input language defaults to 'auto'."
+  (poly-translate-test-setup)
+
+  (poly-translate-register-engine
+   '(:name "Test Engine"
+     :backend test-backend
+     :output-lang "en"))
+
+  (let ((engine (poly-translate-get-engine "Test Engine")))
+    (should (string= (poly-translate-engine-input-lang engine) "auto")))
+
+  (poly-translate-test-teardown))
+
+;;; Cache Edge Cases
+
+(ert-deftest poly-translate-test-cache-different-backends ()
+  "Test cache isolation between different backends."
+  (poly-translate-test-setup)
+
+  ;; Cache same text for different backends
+  (poly-translate-backend-cache-put 'backend1 "hello" "en" "ja" "こんにちは")
+  (poly-translate-backend-cache-put 'backend2 "hello" "en" "ja" "ハロー")
+
+  ;; Each backend should have its own cached value
+  (let ((cache1 (poly-translate-backend-cache-get 'backend1 "hello" "en" "ja"))
+        (cache2 (poly-translate-backend-cache-get 'backend2 "hello" "en" "ja")))
+    (should (string= cache1 "こんにちは"))
+    (should (string= cache2 "ハロー")))
+
+  (poly-translate-test-teardown))
+
+(ert-deftest poly-translate-test-cache-different-language-pairs ()
+  "Test cache with different language pairs."
+  (poly-translate-test-setup)
+
+  ;; Cache same text for different language pairs
+  (poly-translate-backend-cache-put 'test-backend "hello" "en" "ja" "こんにちは")
+  (poly-translate-backend-cache-put 'test-backend "hello" "en" "fr" "bonjour")
+  (poly-translate-backend-cache-put 'test-backend "hello" "ja" "en" "hello")
+
+  ;; Each pair should have its own cached value
+  (let ((cache-en-ja (poly-translate-backend-cache-get 'test-backend "hello" "en" "ja"))
+        (cache-en-fr (poly-translate-backend-cache-get 'test-backend "hello" "en" "fr"))
+        (cache-ja-en (poly-translate-backend-cache-get 'test-backend "hello" "ja" "en")))
+    (should (string= cache-en-ja "こんにちは"))
+    (should (string= cache-en-fr "bonjour"))
+    (should (string= cache-ja-en "hello")))
+
+  (poly-translate-test-teardown))
+
+;;; Rate Limiting Edge Cases
+
+(ert-deftest poly-translate-test-rate-limiting-different-backends ()
+  "Test that rate limiting is independent per backend."
+  (poly-translate-test-setup)
+
+  ;; Backend1 can make 1 request per second
+  (should (poly-translate-backend-check-rate-limit 'backend1 1 1))
+  (should-not (poly-translate-backend-check-rate-limit 'backend1 1 1))
+
+  ;; Backend2 should not be affected by backend1's limit
+  (should (poly-translate-backend-check-rate-limit 'backend2 1 1))
+  (should-not (poly-translate-backend-check-rate-limit 'backend2 1 1))
+
+  (poly-translate-test-teardown))
+
+(ert-deftest poly-translate-test-rate-limiting-burst ()
+  "Test rate limiting with burst requests."
+  (poly-translate-test-setup)
+
+  ;; Allow 3 requests per 2 seconds
+  (should (poly-translate-backend-check-rate-limit 'test-backend 3 2))
+  (should (poly-translate-backend-check-rate-limit 'test-backend 3 2))
+  (should (poly-translate-backend-check-rate-limit 'test-backend 3 2))
+  (should-not (poly-translate-backend-check-rate-limit 'test-backend 3 2))
+
+  (poly-translate-test-teardown))
+
+;;; Duplicate Engine Registration
+
+(ert-deftest poly-translate-test-duplicate-engine-registration ()
+  "Test that registering an engine with the same name overwrites the previous one."
+  (poly-translate-test-setup)
+
+  (poly-translate-test-register-mock-backend 'backend1)
+  (poly-translate-test-register-mock-backend 'backend2)
+
+  ;; Register first engine
+  (poly-translate-test-register-mock-engine "Test Engine" 'backend1 "en" "ja")
+  (let ((engine (poly-translate-get-engine "Test Engine")))
+    (should (eq (poly-translate-engine-backend engine) 'backend1)))
+
+  ;; Register again with same name but different backend
+  (poly-translate-test-register-mock-engine "Test Engine" 'backend2 "ja" "en")
+  (let ((engine (poly-translate-get-engine "Test Engine")))
+    (should (eq (poly-translate-engine-backend engine) 'backend2))
+    (should (string= (poly-translate-engine-input-lang engine) "ja"))
+    (should (string= (poly-translate-engine-output-lang engine) "en")))
+
+  (poly-translate-test-teardown))
+
+;;; Language Name Formatting
+
+(ert-deftest poly-translate-test-language-name-unknown ()
+  "Test language name formatting for unknown codes."
+  (let ((name (poly-translate-language-name "xyz")))
+    (should (string= name "xyz"))))
+
+(ert-deftest poly-translate-test-language-name-auto ()
+  "Test language name formatting for 'auto'."
+  ;; Assuming "auto" is handled by poly-translate-language-codes
+  (let ((name (poly-translate-language-name "auto")))
+    (should (stringp name))))
+
+;;; Empty Text Handling
+
+(ert-deftest poly-translate-test-empty-text-translation ()
+  "Test translation with empty text."
+  (poly-translate-test-setup)
+
+  (poly-translate-test-register-mock-backend 'mock-backend)
+  (poly-translate-test-register-mock-engine "Mock Engine" 'mock-backend "en" "ja")
+
+  ;; Test with empty string
+  (let ((result nil))
+    (poly-translate-with-engine
+     "Mock Engine"
+     ""
+     (lambda (translation) (setq result translation))
+     (lambda (err) (error "Translation failed: %s" err)))
+    ;; Empty text should still be processed by backend
+    (should result))
+
+  (poly-translate-test-teardown))
+
+;;; Callback Error Handling
+
+(ert-deftest poly-translate-test-callback-with-nil-error-callback ()
+  "Test that nil error callback is handled gracefully."
+  (poly-translate-test-setup)
+
+  ;; Register backend that always fails
+  (poly-translate-register-backend
+   'failing-backend
+   `(:translate ,(lambda (backend text from-lang to-lang config callback error-callback)
+                   (funcall error-callback "Test error"))
+     :validate-config ,(lambda (backend config) t)))
+
+  (poly-translate-register-engine
+   '(:name "Failing Engine"
+     :backend failing-backend
+     :input-lang "en"
+     :output-lang "ja"))
+
+  ;; Should not crash when error-callback is nil
+  (should
+   (condition-case nil
+       (progn
+         (poly-translate-with-engine
+          "Failing Engine"
+          "test"
+          (lambda (result) nil)
+          nil)  ; nil error callback
+         t)
+     (error nil)))
+
+  (poly-translate-test-teardown))
+
 (provide 'poly-translate-test)
 ;;; poly-translate-test.el ends here
