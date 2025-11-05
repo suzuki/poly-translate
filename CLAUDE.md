@@ -51,6 +51,67 @@ emacs -Q -batch -L . -f batch-byte-compile poly-translate.el
 
 # Run tests (when implemented)
 emacs -Q -batch -L . -l ert -l poly-translate-test.el -f ert-run-tests-batch-and-exit
+
+# Validate project code
+emacs -Q -batch -L . -l validate-project.el
+
+# Validate specific file
+emacs -Q -batch -L . -l verify-elisp.el --eval "(verify-elisp-file \"filename.el\")"
+```
+
+## Code Validation System
+
+This project includes a comprehensive Emacs Lisp validation system to catch errors before execution:
+
+### Validation Stages
+
+1. **Syntax Validation** - Checks if code can be parsed as valid Lisp
+2. **Symbol Resolution** - Verifies all symbols are defined
+3. **Dependency Checking** - Ensures all required libraries are available
+4. **Byte Compilation** - Compiles code to catch compile-time errors
+5. **Safe Evaluation** - Tests simple expressions in a restricted environment
+
+### Usage for Development
+
+#### Interactive Validation
+```elisp
+;; Load the validation system
+(require 'verify-elisp)
+
+;; Validate current buffer
+M-x verify-elisp-current-buffer
+
+;; Validate selected region
+M-x verify-elisp-region
+
+;; Validate any file
+M-x verify-elisp-file
+```
+
+#### MCP Integration
+The project includes MCP (Model Context Protocol) server integration for real-time validation:
+
+```bash
+# Start MCP server (requires mcp-server-lib.el)
+emacs --daemon
+emacsclient --eval "(require 'mcp-server)(poly-translate-start-mcp-server)"
+```
+
+#### Claude Code Integration
+When `mcp-server-lib.el` is available, Claude Code can use these MCP tools:
+- `validate-elisp-syntax` - Quick syntax checking
+- `validate-elisp-full` - Comprehensive validation
+- `eval-elisp` - Safe code evaluation
+
+### Validation Configuration
+
+```elisp
+;; Strict mode - treat warnings as errors
+(setq verify-elisp-strict-warnings t)
+
+;; Customize safe functions for evaluation
+(setq verify-elisp-safe-eval-functions 
+      '(+ - * / = < > car cdr cons list append))
 ```
 
 ## Code Structure

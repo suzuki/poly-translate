@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "elisp-validator": {
+      "command": "emacsclient",
+      "args": [
+        "--eval", 
+        "(progn (add-to-list 'load-path \".\")(require 'mcp-server)(poly-translate-start-mcp-server))"
+      ],
+      "env": {
+        "EMACS_MCP_MODE": "true"
+      }
+    }
+  }
+}
